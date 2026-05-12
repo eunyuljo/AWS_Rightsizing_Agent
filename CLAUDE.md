@@ -5,23 +5,37 @@ MCP 툴을 사용해 AWS 리소스를 직접 조회하고, 분석 결과를 바�
 
 ## 사용 가능한 MCP 툴
 
-| MCP 서버 | 주요 역할 |
-|---|---|
-| `awslabs-core` | EC2/RDS 인스턴스 목록 조회, 리소스 메타데이터 |
-| `awslabs-cloudwatch` | CPU·네트워크·디스크 메트릭 수집 |
-| `awslabs-cost-explorer` | 비용 데이터 및 AWS 자체 rightsizing 권고 조회 |
+| MCP 서버 | 주요 역할 | 필수 여부 |
+|---|---|---|
+| `awslabs-core` | EC2/RDS 인스턴스 목록 조회, 리소스 메타데이터 | 필수 |
+| `awslabs-cloudwatch` | CPU·네트워크·디스크 메트릭 수집 | 필수 |
+| `awslabs-cost-explorer` | 실제 비용 데이터 및 AWS 자체 rightsizing 권고 | 선택 |
+
+`awslabs-cost-explorer` 가 없거나 호출에 실패하면 `ec2_pricing.json` 의 On-Demand 가격표로 비용을 추정합니다.
+
+## 비용 추정 방식 (Cost Explorer 미사용 시)
+
+`ec2_pricing.json` 파일에 인스턴스 패밀리·사이즈별 시간당 단가(us-east-1, Linux, On-Demand)가 있습니다.
+
+```
+월 추정 비용 = 시간당 단가 × 720시간
+절감 추정액 = 현재 인스턴스 월 비용 - 권고 인스턴스 월 비용
+```
+
+리전이 us-east-1이 아닌 경우 리포트에 "(가격 참조는 us-east-1 기준, 실제와 다를 수 있음)"을 명시합니다.
 
 ## 분석 워크플로우
 
 사용자가 rightsizing 분석을 요청하면 아래 순서로 진행하세요.
 
-### Step 1 — AWS Compute Optimizer / Cost Explorer 권고 먼저 확인
+### Step 1 — [선택] Cost Explorer 권고 확인
+Cost Explorer MCP 사용 가능 시:
 ```
 cost-explorer: GetRightsizingRecommendation
   - service: EC2
   - lookbackPeriodInDays: 30
 ```
-AWS가 이미 계산한 권고안이 있으면 이를 기반으로 시작합니다.
+실패하거나 MCP가 없으면 Step 2로 바로 진행합니다.
 
 ### Step 2 — 실행 중인 EC2 인스턴스 목록 조회
 ```
@@ -42,19 +56,27 @@ core: describe_instances
 
 Period: 3600 (1시간 단위), 30일치 집계
 
+CloudWatch MCP 툴 사용 예시:
+```
+awslabs-cloudwatch: get_metric_data
+  - namespace: AWS/EC2
+  - metric_name: CPUUtilization
+  - dimensions: [{ Name: "InstanceId", Value: "<instance-id>" }]
+  - start_time: <30일 전>
+  - end_time: <현재>
+  - period: 3600
+  - statistics: ["Average", "Maximum"]
+```
+
 ### Step 4 — RDS 분석 (해당 시)
 ```
 core: describe_db_instances
 cloudwatch metrics: DatabaseConnections, CPUUtilization, FreeableMemory, ReadIOPS, WriteIOPS
 ```
 
-### Step 5 — 비용 데이터 조회
-```
-cost-explorer: GetCostAndUsage
-  - granularity: MONTHLY
-  - last 3 months
-  - GroupBy: [SERVICE, INSTANCE_TYPE]
-```
+### Step 5 — 비용 산정
+- Cost Explorer 사용 가능: 실제 청구 데이터 사용
+- Cost Explorer 미사용: `ec2_pricing.json` 참조하여 인스턴스 타입별 월 비용 추정
 
 ### Step 6 — 권고안 생성
 
@@ -98,6 +120,7 @@ cost-explorer: GetCostAndUsage
 
 ### 주의사항
 - 메모리 메트릭은 CloudWatch Agent 미설치 인스턴스에서는 수집되지 않았습니다.
+- 비용이 ec2_pricing.json 기반 추정치인 경우 실제 청구액(Reserved/Savings Plan 적용 시)과 다를 수 있습니다.
 - 권고 적용 전 애플리케이션 팀과 반드시 검토하세요.
 - 피크 타임 트래픽 패턴을 추가로 확인하는 것을 권장합니다.
 ```

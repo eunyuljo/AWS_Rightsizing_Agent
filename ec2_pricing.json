@@ -1,0 +1,170 @@
+{
+  "_comment": "EC2 On-Demand 가격 (us-east-1, Linux, 시간당 USD). 비용 추정 fallback용 참조 데이터.",
+  "_source": "https://aws.amazon.com/ec2/pricing/on-demand/",
+  "_updated": "2025-05",
+
+  "t3": {
+    "nano":    0.0052,
+    "micro":   0.0104,
+    "small":   0.0208,
+    "medium":  0.0416,
+    "large":   0.0832,
+    "xlarge":  0.1664,
+    "2xlarge": 0.3328
+  },
+  "t3a": {
+    "nano":    0.0047,
+    "micro":   0.0094,
+    "small":   0.0188,
+    "medium":  0.0376,
+    "large":   0.0752,
+    "xlarge":  0.1504,
+    "2xlarge": 0.3008
+  },
+  "t4g": {
+    "nano":    0.0042,
+    "micro":   0.0084,
+    "small":   0.0168,
+    "medium":  0.0336,
+    "large":   0.0672,
+    "xlarge":  0.1344,
+    "2xlarge": 0.2688
+  },
+  "m5": {
+    "large":    0.096,
+    "xlarge":   0.192,
+    "2xlarge":  0.384,
+    "4xlarge":  0.768,
+    "8xlarge":  1.536,
+    "12xlarge": 2.304,
+    "16xlarge": 3.072,
+    "24xlarge": 4.608
+  },
+  "m5a": {
+    "large":    0.086,
+    "xlarge":   0.172,
+    "2xlarge":  0.344,
+    "4xlarge":  0.688,
+    "8xlarge":  1.376,
+    "12xlarge": 2.064,
+    "16xlarge": 2.752,
+    "24xlarge": 4.128
+  },
+  "m6i": {
+    "large":    0.096,
+    "xlarge":   0.192,
+    "2xlarge":  0.384,
+    "4xlarge":  0.768,
+    "8xlarge":  1.536,
+    "12xlarge": 2.304,
+    "16xlarge": 3.072,
+    "24xlarge": 4.608,
+    "32xlarge": 6.144
+  },
+  "m6a": {
+    "large":    0.0864,
+    "xlarge":   0.1728,
+    "2xlarge":  0.3456,
+    "4xlarge":  0.6912,
+    "8xlarge":  1.3824,
+    "12xlarge": 2.0736,
+    "16xlarge": 2.7648,
+    "24xlarge": 4.1472,
+    "48xlarge": 8.2944
+  },
+  "m7i": {
+    "large":    0.1008,
+    "xlarge":   0.2016,
+    "2xlarge":  0.4032,
+    "4xlarge":  0.8064,
+    "8xlarge":  1.6128,
+    "12xlarge": 2.4192,
+    "16xlarge": 3.2256,
+    "24xlarge": 4.8384,
+    "48xlarge": 9.6768
+  },
+  "c5": {
+    "large":    0.085,
+    "xlarge":   0.17,
+    "2xlarge":  0.34,
+    "4xlarge":  0.68,
+    "9xlarge":  1.53,
+    "12xlarge": 2.04,
+    "18xlarge": 3.06,
+    "24xlarge": 4.08
+  },
+  "c5a": {
+    "large":    0.077,
+    "xlarge":   0.154,
+    "2xlarge":  0.308,
+    "4xlarge":  0.616,
+    "8xlarge":  1.232,
+    "12xlarge": 1.848,
+    "16xlarge": 2.464,
+    "24xlarge": 3.696
+  },
+  "c6i": {
+    "large":    0.085,
+    "xlarge":   0.17,
+    "2xlarge":  0.34,
+    "4xlarge":  0.68,
+    "8xlarge":  1.36,
+    "12xlarge": 2.04,
+    "16xlarge": 2.72,
+    "24xlarge": 4.08,
+    "32xlarge": 5.44
+  },
+  "c7i": {
+    "large":    0.08925,
+    "xlarge":   0.1785,
+    "2xlarge":  0.357,
+    "4xlarge":  0.714,
+    "8xlarge":  1.428,
+    "12xlarge": 2.142,
+    "16xlarge": 2.856,
+    "24xlarge": 4.284,
+    "48xlarge": 8.568
+  },
+  "r5": {
+    "large":    0.126,
+    "xlarge":   0.252,
+    "2xlarge":  0.504,
+    "4xlarge":  1.008,
+    "8xlarge":  2.016,
+    "12xlarge": 3.024,
+    "16xlarge": 4.032,
+    "24xlarge": 6.048
+  },
+  "r5a": {
+    "large":    0.1134,
+    "xlarge":   0.2268,
+    "2xlarge":  0.4536,
+    "4xlarge":  0.9072,
+    "8xlarge":  1.8144,
+    "12xlarge": 2.7216,
+    "16xlarge": 3.6288,
+    "24xlarge": 5.4432
+  },
+  "r6i": {
+    "large":    0.126,
+    "xlarge":   0.252,
+    "2xlarge":  0.504,
+    "4xlarge":  1.008,
+    "8xlarge":  2.016,
+    "12xlarge": 3.024,
+    "16xlarge": 4.032,
+    "24xlarge": 6.048,
+    "32xlarge": 8.064
+  },
+  "r7i": {
+    "large":    0.1323,
+    "xlarge":   0.2646,
+    "2xlarge":  0.5292,
+    "4xlarge":  1.0584,
+    "8xlarge":  2.1168,
+    "12xlarge": 3.1752,
+    "16xlarge": 4.2336,
+    "24xlarge": 6.3504,
+    "48xlarge": 12.7008
+  }
+}
