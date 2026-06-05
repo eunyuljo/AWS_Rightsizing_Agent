@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Infra Chat — 비개발자 뷰</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif; background:#f0f4f8; color:#1a202c; display:flex; height:100vh; overflow:hidden; }
+
+  /* Persona selector */
+  .persona-bar { position:fixed; top:0; left:0; right:0; height:44px; background:#1a202c; display:flex; align-items:center; padding:0 20px; gap:8px; z-index:100; }
+  .persona-label { font-size:11px; color:#718096; margin-right:4px; }
+  .persona-btn { font-size:12px; padding:5px 14px; border-radius:20px; border:1px solid #4a5568; background:transparent; color:#a0aec0; cursor:pointer; transition:all .15s; }
+  .persona-btn.active { background:#fff; color:#1a202c; border-color:#fff; font-weight:600; }
+
+  /* Layout */
+  .wrap { display:flex; width:100%; margin-top:44px; height:calc(100vh - 44px); }
+
+  /* Sidebar */
+  .sidebar { width:200px; background:#fff; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; flex-shrink:0; padding:16px 0; }
+  .sb-logo { padding:0 16px 16px; border-bottom:1px solid #f7fafc; margin-bottom:8px; }
+  .sb-logo-mark { font-size:20px; }
+  .sb-logo-text { font-size:13px; font-weight:700; color:#2d3748; }
+  .sb-logo-sub { font-size:10px; color:#a0aec0; }
+  .sb-section { font-size:10px; font-weight:700; color:#a0aec0; letter-spacing:.08em; text-transform:uppercase; padding:10px 16px 4px; }
+  .sb-item { display:flex; align-items:center; gap:8px; padding:8px 16px; font-size:13px; color:#718096; cursor:pointer; border-radius:0; transition:all .15s; }
+  .sb-item:hover { background:#f7fafc; color:#2d3748; }
+  .sb-item.active { background:#ebf8ff; color:#2b6cb0; font-weight:500; }
+  .sb-item .ic { font-size:14px; }
+  .sb-badge { margin-left:auto; background:#fed7d7; color:#c53030; font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; }
+
+  /* Main */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Header */
+  .page-header { background:#fff; border-bottom:1px solid #e2e8f0; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .ph-title { font-size:16px; font-weight:700; color:#2d3748; }
+  .ph-sub { font-size:12px; color:#a0aec0; margin-top:2px; }
+  .ph-right { display:flex; gap:8px; align-items:center; }
+  .region-tag { background:#ebf8ff; color:#2b6cb0; font-size:11px; font-weight:600; padding:4px 10px; border-radius:6px; }
+
+  /* Messages */
+  .messages { flex:1; overflow-y:auto; padding:24px; }
+  .messages::-webkit-scrollbar { width:4px; }
+  .messages::-webkit-scrollbar-thumb { background:#e2e8f0; }
+
+  /* Date divider */
+  .date-div { text-align:center; font-size:11px; color:#a0aec0; margin:16px 0; display:flex; align-items:center; gap:10px; }
+  .date-div::before, .date-div::after { content:''; flex:1; height:1px; background:#e2e8f0; }
+
+  /* User message */
+  .msg-user { display:flex; justify-content:flex-end; margin-bottom:20px; }
+  .user-bubble { background:#2b6cb0; color:#fff; padding:12px 18px; border-radius:20px 20px 4px 20px; font-size:14px; max-width:420px; line-height:1.5; }
+
+  /* Assistant message */
+  .msg-ai { display:flex; gap:12px; margin-bottom:24px; align-items:flex-start; }
+  .ai-avatar { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .ai-body { flex:1; max-width:680px; }
+  .ai-name { font-size:11px; font-weight:600; color:#a0aec0; margin-bottom:6px; }
+  .ai-text { font-size:14px; color:#4a5568; line-height:1.7; }
+  .ai-text p { margin-bottom:8px; }
+  .ai-text strong { color:#2d3748; }
+
+  /* Answer card */
+  .answer-card { background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin:10px 0; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .ac-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+  .ac-title { font-size:15px; font-weight:700; color:#2d3748; }
+  .ac-sub { font-size:11px; color:#a0aec0; margin-top:3px; }
+  .ac-actions { display:flex; gap:6px; flex-shrink:0; }
+  .ac-btn { font-size:11px; padding:5px 12px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#718096; cursor:pointer; white-space:nowrap; }
+  .ac-btn.blue { background:#ebf8ff; border-color:#bee3f8; color:#2b6cb0; font-weight:500; }
+
+  /* KPI row */
+  .kpi-row { display:grid; gap:10px; margin-bottom:14px; }
+  .kpi-row.col3 { grid-template-columns:repeat(3,1fr); }
+  .kpi-row.col4 { grid-template-columns:repeat(4,1fr); }
+  .kpi { background:#f7fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center; }
+  .kpi.red { background:#fff5f5; border-color:#fed7d7; }
+  .kpi.green { background:#f0fff4; border-color:#c6f6d5; }
+  .kpi.yellow { background:#fffff0; border-color:#fefcbf; }
+  .kpi.blue { background:#ebf8ff; border-color:#bee3f8; }
+  .kpi-val { font-size:24px; font-weight:800; color:#2d3748; }
+  .kpi.red .kpi-val { color:#c53030; }
+  .kpi.green .kpi-val { color:#276749; }
+  .kpi.yellow .kpi-val { color:#975a16; }
+  .kpi.blue .kpi-val { color:#2b6cb0; }
+  .kpi-label { font-size:11px; color:#718096; margin-top:4px; }
+  .kpi-change { font-size:11px; font-weight:600; margin-top:4px; }
+
+  /* Table */
+  table.bt { width:100%; border-collapse:collapse; font-size:13px; }
+  table.bt th { background:#f7fafc; padding:9px 14px; text-align:left; font-size:11px; font-weight:700; color:#718096; border-bottom:2px solid #e2e8f0; letter-spacing:.04em; text-transform:uppercase; }
+  table.bt td { padding:11px 14px; border-bottom:1px solid #f7fafc; color:#4a5568; }
+  table.bt tr:last-child td { border-bottom:none; }
+  table.bt tr:hover td { background:#f7fafc; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:6px; }
+  .tag.red { background:#fff5f5; color:#c53030; border:1px solid #fed7d7; }
+  .tag.yellow { background:#fffff0; color:#975a16; border:1px solid #fefcbf; }
+  .tag.green { background:#f0fff4; color:#276749; border:1px solid #c6f6d5; }
+  .tag.blue { background:#ebf8ff; color:#2b6cb0; border:1px solid #bee3f8; }
+  .tag.gray { background:#f7fafc; color:#718096; border:1px solid #e2e8f0; }
+
+  /* Summary box */
+  .summary-box { border-left:4px solid #4299e1; background:#ebf8ff; border-radius:0 10px 10px 0; padding:12px 16px; margin:10px 0; }
+  .summary-box.warn { border-color:#f6ad55; background:#fffbeb; }
+  .summary-box.danger { border-color:#fc8181; background:#fff5f5; }
+  .summary-box.success { border-color:#68d391; background:#f0fff4; }
+  .sb-title { font-size:13px; font-weight:700; color:#2d3748; margin-bottom:6px; }
+  .sb-body { font-size:13px; color:#4a5568; line-height:1.6; }
+  .sb-body ul { padding-left:16px; }
+  .sb-body li { margin-bottom:4px; }
+
+  /* SQL toggle */
+  .sql-toggle { display:flex; align-items:center; gap:6px; font-size:11px; color:#a0aec0; cursor:pointer; margin-top:10px; user-select:none; }
+  .sql-toggle:hover { color:#718096; }
+  .sql-code { display:none; background:#2d3748; border-radius:8px; padding:12px 16px; margin-top:6px; font-family:monospace; font-size:11px; color:#e2e8f0; line-height:1.7; overflow-x:auto; }
+  .sql-code.open { display:block; }
+  .kw { color:#b794f4; } .fn { color:#68d391; } .str { color:#f6e05e; }
+
+  /* Action buttons */
+  .action-row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .action-btn { display:flex; align-items:center; gap:5px; font-size:12px; padding:7px 14px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#4a5568; cursor:pointer; font-weight:500; transition:all .15s; }
+  .action-btn:hover { background:#f7fafc; border-color:#cbd5e0; }
+  .action-btn.primary { background:#2b6cb0; color:#fff; border-color:#2b6cb0; }
+  .action-btn.primary:hover { background:#2c5282; }
+  .action-btn.danger { background:#fff5f5; color:#c53030; border-color:#fed7d7; }
+
+  /* Chart */
+  .chart-wrap { margin:10px 0; padding:4px 0; }
+
+  /* Follow-up chips */
+  .followup { margin-top:10px; }
+  .followup-label { font-size:11px; color:#a0aec0; margin-bottom:6px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:12px; padding:6px 12px; border-radius:20px; border:1px solid #bee3f8; background:#ebf8ff; color:#2b6cb0; cursor:pointer; transition:all .15s; }
+  .chip:hover { background:#bee3f8; }
+
+  /* Input */
+  .input-area { background:#fff; border-top:1px solid #e2e8f0; padding:16px 24px 20px; flex-shrink:0; }
+  .input-row { display:flex; align-items:center; gap:10px; background:#f7fafc; border:1.5px solid #e2e8f0; border-radius:14px; padding:10px 14px; transition:border-color .15s; }
+  .input-row:focus-within { border-color:#4299e1; background:#fff; }
+  .input-row input { flex:1; background:none; border:none; outline:none; font-size:14px; color:#2d3748; font-family:inherit; }
+  .input-row input::placeholder { color:#a0aec0; }
+  .send-btn { background:#2b6cb0; color:#fff; border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+  /* Typing indicator */
+  .typing { display:flex; align-items:center; gap:4px; padding:8px 0; }
+  .typing span { width:7px; height:7px; border-radius:50%; background:#a0aec0; animation:bounce 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay:.15s; }
+  .typing span:nth-child(3) { animation-delay:.3s; }
+  @keyframes bounce { 0%,60%,100% { transform:translateY(0); opacity:.4; } 30% { transform:translateY(-5px); opacity:1; } }
+</style>
+</head>
+<body>
+
+<!-- Persona selector -->
+<div class="persona-bar">
+  <span class="persona-label">보는 사람:</span>
+  <button class="persona-btn active" onclick="setPersona(this,'cfo')">💼 CFO / 재무</button>
+  <button class="persona-btn" onclick="setPersona(this,'security')">🔒 보안 담당자</button>
+  <button class="persona-btn" onclick="setPersona(this,'ops')">⚙️ 팀장 / 운영</button>
+</div>
+
+<div class="wrap">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-mark">☁️</div>
+      <div class="sb-logo-text">InfraChat</div>
+      <div class="sb-logo-sub">AWS 인프라 어시스턴트</div>
+    </div>
+
+    <div class="sb-section">대화 내역</div>
+    <div class="sb-item active"><span class="ic">💬</span> <span id="sb-active">이번 달 비용 분석</span></div>
+    <div class="sb-item"><span class="ic">💬</span> 지난달 비교</div>
+    <div class="sb-item"><span class="ic">💬</span> 팀별 비용 현황</div>
+
+    <div class="sb-section">저장된 보고서</div>
+    <div class="sb-item"><span class="ic">📄</span> 월간 비용 리포트</div>
+    <div class="sb-item"><span class="ic">📄</span> 보안 점검 리포트 <span class="sb-badge" id="sb-badge">3</span></div>
+
+    <div class="sb-section">설정</div>
+    <div class="sb-item"><span class="ic">🔔</span> 알림 설정</div>
+    <div class="sb-item"><span class="ic">👤</span> 내 계정</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="page-header">
+      <div>
+        <div class="ph-title" id="ph-title">AWS 비용 현황 분석</div>
+        <div class="ph-sub" id="ph-sub">2026년 6월 · CFO 뷰</div>
+      </div>
+      <div class="ph-right">
+        <span class="region-tag">ap-northeast-2</span>
+      </div>
+    </div>
+
+    <!-- CFO View -->
+    <div class="messages" id="view-cfo">
+      <div class="date-div">2026년 6월 5일</div>
+
+      <!-- user -->
+      <div class="msg-user">
+        <div class="user-bubble">이번 달 AWS 비용 왜 갑자기 올랐어?</div>
+      </div>
+
+      <!-- ai -->
+      <div class="msg-ai">
+        <div class="ai-avatar">🤖</div>
+        <div class="ai-body">
+          <div class="ai-name">AWS 인프라 어시스턴트</div>
+          <div class="ai-text">
+            <div class="answer-card">
+              <div class="ac-head">
+                <div>
+                  <div class="ac-title">📈 이번 달 비용이 전월 대비 12.3% 증가했어요</div>
+                  <div class="ac-sub">분석 기간: 2026-05-06 ~ 2026-06-05 · 실시간 데이터</div>
+                </div>
+                <div class="ac-actions">
+                  <button class="ac-btn blue">리포트 저장</button>
+                  <button class="ac-btn">공유</button>
+                </div>
+              </div>
+
+              <div class="kpi-row col4">
+                <div class="kpi blue">
+                  <div class="kpi-val">$4,182</div>
+                  <div class="kpi-label">이번 달 누계 (6/5 기준)</div>
+                </div>
+                <div class="kpi red">
+                  <div class="kpi-val">+$463</div>
+                  <div class="kpi-label">전월 대비 증가액</div>
+                  <div class="kpi-change" style="color:#c53030">▲ 12.3%</div>
+                </div>
+                <div class="kpi yellow">
+                  <div class="kpi-val">$3,719</div>
+                  <div class="kpi-label">지난 달 총 비용</div>
+                </div>
+                <div class="kpi green">
+                  <div class="kpi-val">$861</div>
+                  <div class="kpi-label">줄일 수 있는 비용</div>
+                  <div class="kpi-change" style="color:#276749">▼ 20.6%</div>
+                </div>
+              </div>
+
+              <div class="summary-box danger">
+                <div class="sb-title">🔴 주요 원인 — 3가지</div>
+                <div class="sb-body">
+                  <ul>
+                    <li><strong>batch-01 서버 추가 ($210/월)</strong> — 5월 22일 새로 생성됐는데, 현재 CPU 사용률 2%로 거의 놀고 있어요. 용도를 확인해봐야 할 것 같아요.</li>
+                    <li><strong>데이터 전송 비용 급증 (+$89)</strong> — 리전 간 데이터 이동이 5월 중순부터 늘었어요. 개발팀에 확인이 필요해요.</li>
+                    <li><strong>RDS 스토리지 자동 확장 (+$44)</strong> — prod-rds 스토리지가 용량 부족으로 자동 확장됐어요.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="chart-wrap" style="height:220px">
+                <canvas id="costTrend"></canvas>
+              </div>
+
+              <div class="action-row">
+                <button class="action-btn primary">📊 전체 서비스별 상세 보기</button>
+                <button class="action-btn">👥 팀별로 나눠서 보기</button>
+                <button class="action-btn danger">🗑 batch-01 용도 확인 요청</button>
+              </div>
+            </div>
+
+            <div class="sql-toggle" onclick="toggleSql(this)">
+              <span>▶</span> 어떻게 조회했는지 보기 (SQL)
+            </div>
+            <div class="sql-code">
+<span class="kw">SELECT</span> date_trunc(<span class="str">'month'</span>, line_item_usage_start_date) <span class="kw">AS</span> month,
+       product_service_code, sum(line_item_unblended_cost) <span class="kw">AS</span> cost
+<span class="kw">FROM</span>   aws_cost_by_service
+<span class="kw">WHERE</span>  line_item_usage_start_date >= now() - interval <span class="str">'60 days'</span>
+<span class="kw">GROUP BY</span> 1, 2
+<span class="kw">ORDER BY</span> 1 <span class="kw">DESC</span>, 3 <span class="kw">DESC</span>;</div>
+
+            <div class="followup">
+              <div class="followup-label">이런 것도 물어보세요</div>
+              <div class="chips">
+                <span class="chip">batch-01은 누가 만든 거야?</span>
+                <span class="chip">팀별로 비용 분리해줘</span>
+                <span class="chip">절감 $861 어떻게 하면 돼?</span>
+                <span class="chip">지난 6개월 추이 보여줘</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- user 2 -->
+      <div class="msg-user">
+        <div class="user-bubble">절감 $861 어떻게 하면 돼?</div>
+      </div>
+
+      <!-- ai 2 -->
+      <div class="msg-ai">
+        <div class="ai-avatar">🤖</div>
+        <div class="ai-body">
+          <div class="ai-name">AWS 인프라 어시스턴트</div>
+          <div class="ai-text">
+            <div class="answer-card">
+              <div class="ac-head">
+                <div>
+                  <div class="ac-title">💰 월 $861 절감 방법 — 4가지 조치</div>
+                  <div class="ac-sub">개발팀 확인 후 적용 필요 · 예상 절감액은 추정치</div>
+                </div>
+                <div class="ac-actions">
+                  <button class="ac-btn blue">개발팀에 요청서 보내기</button>
+                </div>
+              </div>
+
+              <table class="bt">
+                <thead>
+                  <tr><th>조치 항목</th><th>현재 비용</th><th>절감 후</th><th>절감액</th><th>난이도</th><th>우선순위</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>batch-01 서버 종료</strong><br><span style="font-size:11px;color:#a0aec0">30일간 CPU 2%, 사용 흔적 없음</span></td>
+                    <td>$210/월</td>
+                    <td>$0</td>
+                    <td style="color:#276749;font-weight:700">-$210</td>
+                    <td><span class="tag yellow">확인 필요</span></td>
+                    <td><span class="tag red">즉시</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>prod-api 서버 사양 축소</strong><br><span style="font-size:11px;color:#a0aec0">m5.2xlarge → m5.xlarge, CPU 평균 18%</span></td>
+                    <td>$277/월</td>
+                    <td>$138/월</td>
+                    <td style="color:#276749;font-weight:700">-$139</td>
+                    <td><span class="tag yellow">개발팀 승인</span></td>
+                    <td><span class="tag yellow">이번 달</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>test-rds 사양 축소</strong><br><span style="font-size:11px;color:#a0aec0">r5.xlarge → r5.large</span></td>
+                    <td>$245/월</td>
+                    <td>$117/월</td>
+                    <td style="color:#276749;font-weight:700">-$128</td>
+                    <td><span class="tag blue">간단</span></td>
+                    <td><span class="tag yellow">이번 달</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>dev 서버 사양 축소</strong><br><span style="font-size:11px;color:#a0aec0">t3.large → t3.medium</span></td>
+                    <td>$66/월</td>
+                    <td>$33/월</td>
+                    <td style="color:#276749;font-weight:700">-$33</td>
+                    <td><span class="tag blue">간단</span></td>
+                    <td><span class="tag gray">다음 달</span></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="summary-box success" style="margin-top:14px">
+                <div class="sb-title">✅ 합계: 월 $510 즉시 절감 가능 (나머지는 개발팀 확인 후)</div>
+                <div class="sb-body">batch-01 종료 + test-rds 축소만 해도 바로 $338 절감돼요. 개발팀에 확인 요청 버튼으로 슬랙 메시지를 바로 보낼 수 있어요.</div>
+              </div>
+
+              <div class="action-row">
+                <button class="action-btn primary">📨 개발팀에 Slack 요청 보내기</button>
+                <button class="action-btn">📋 이 내용 이메일로 내보내기</button>
+              </div>
+            </div>
+
+            <div class="followup">
+              <div class="followup-label">이런 것도 물어보세요</div>
+              <div class="chips">
+                <span class="chip">batch-01 생성한 사람이 누구야?</span>
+                <span class="chip">절감하면 연간으로 얼마야?</span>
+                <span class="chip">내년 예산 어떻게 짜면 돼?</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security View -->
+    <div class="messages" id="view-security" style="display:none">
+      <div class="date-div">2026년 6월 5일 · 보안 점검</div>
+
+      <div class="msg-user">
+        <div class="user-bubble">외부에서 접근 가능한 서버 목록 뽑아줘</div>
+      </div>
+
+      <div class="msg-ai">
+        <div class="ai-avatar">🤖</div>
+        <div class="ai-body">
+          <div class="ai-name">AWS 인프라 어시스턴트</div>
+          <div class="ai-text">
+            <div class="answer-card">
+              <div class="ac-head">
+                <div>
+                  <div class="ac-title">🚨 인터넷에서 직접 접근 가능한 서버 4개 발견</div>
+                  <div class="ac-sub">조회 시각: 2026-06-05 14:32 · 실시간</div>
+                </div>
+                <div class="ac-actions">
+                  <button class="ac-btn blue">보안팀 공유</button>
+                  <button class="ac-btn">PDF 저장</button>
+                </div>
+              </div>
+
+              <div class="kpi-row col3">
+                <div class="kpi red">
+                  <div class="kpi-val">3개</div>
+                  <div class="kpi-label">즉시 조치 필요</div>
+                </div>
+                <div class="kpi yellow">
+                  <div class="kpi-val">1개</div>
+                  <div class="kpi-label">모니터링 필요</div>
+                </div>
+                <div class="kpi green">
+                  <div class="kpi-val">19개</div>
+                  <div class="kpi-label">정상 (내부망)</div>
+                </div>
+              </div>
+
+              <table class="bt">
+                <thead>
+                  <tr><th>서버 이름</th><th>외부 IP</th><th>열린 포트</th><th>위험도</th><th>조치</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>test-server</strong><br><span style="font-size:11px;color:#a0aec0">i-0d6e5f04 · t2.micro</span></td>
+                    <td>3.36.144.22</td>
+                    <td><span style="color:#c53030;font-weight:600">모든 포트 (0-65535)</span></td>
+                    <td><span class="tag red">매우 높음</span></td>
+                    <td><button class="action-btn danger" style="font-size:11px;padding:4px 8px">즉시 차단</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>prod-web-01</strong><br><span style="font-size:11px;color:#a0aec0">i-0a3f2b91 · t3.medium</span></td>
+                    <td>52.78.12.34</td>
+                    <td>80, 443, <span style="color:#c53030;font-weight:600">22 (SSH)</span></td>
+                    <td><span class="tag red">높음</span></td>
+                    <td><button class="action-btn" style="font-size:11px;padding:4px 8px">SSH 차단 요청</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>prod-web-02</strong><br><span style="font-size:11px;color:#a0aec0">i-0b4c3d82 · t3.medium</span></td>
+                    <td>52.78.56.78</td>
+                    <td>80, 443, <span style="color:#c53030;font-weight:600">22 (SSH)</span></td>
+                    <td><span class="tag red">높음</span></td>
+                    <td><button class="action-btn" style="font-size:11px;padding:4px 8px">SSH 차단 요청</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>dev-bastion</strong><br><span style="font-size:11px;color:#a0aec0">i-0c5d4e93 · t3.small</span></td>
+                    <td>13.125.88.91</td>
+                    <td>22 (SSH, Bastion용)</td>
+                    <td><span class="tag yellow">중간</span></td>
+                    <td><button class="action-btn" style="font-size:11px;padding:4px 8px">IP 제한 권고</button></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="summary-box danger" style="margin-top:14px">
+                <div class="sb-title">🔴 test-server는 지금 당장 위험해요</div>
+                <div class="sb-body">모든 포트가 전 세계에 열려 있어요. 악성 접근 시도가 이미 있을 수 있어요. 사용 중인 서버인지 확인하고, 아니라면 즉시 차단하거나 종료해야 해요.</div>
+              </div>
+
+              <div class="action-row">
+                <button class="action-btn primary">📨 개발팀에 즉시 조치 요청</button>
+                <button class="action-btn">📋 보안 점검 리포트 생성</button>
+                <button class="action-btn">🔔 주간 자동 점검 설정</button>
+              </div>
+            </div>
+
+            <div class="followup">
+              <div class="followup-label">이어서 확인해보세요</div>
+              <div class="chips">
+                <span class="chip">암호화 안 된 DB 있어?</span>
+                <span class="chip">S3 퍼블릭 버킷 있어?</span>
+                <span class="chip">root 계정 최근에 로그인했어?</span>
+                <span class="chip">MFA 없는 계정 있어?</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg-user">
+        <div class="user-bubble">암호화 안 된 DB 있어?</div>
+      </div>
+
+      <div class="msg-ai">
+        <div class="ai-avatar">🤖</div>
+        <div class="ai-body">
+          <div class="ai-name">AWS 인프라 어시스턴트</div>
+          <div class="ai-text">
+            <div class="answer-card">
+              <div class="ac-head">
+                <div>
+                  <div class="ac-title">🔓 암호화되지 않은 데이터베이스 2개 발견</div>
+                  <div class="ac-sub">전체 RDS 6개 중 2개 미암호화</div>
+                </div>
+                <div class="ac-actions">
+                  <button class="ac-btn blue">보안팀 공유</button>
+                </div>
+              </div>
+              <table class="bt">
+                <thead><tr><th>DB 이름</th><th>종류</th><th>사이즈</th><th>암호화</th><th>개인정보 포함 가능성</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><strong>dev-mysql-01</strong></td>
+                    <td>MySQL 8.0</td>
+                    <td>db.t3.medium</td>
+                    <td><span class="tag red">미암호화</span></td>
+                    <td><span class="tag yellow">확인 필요</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>legacy-postgres</strong></td>
+                    <td>PostgreSQL 12</td>
+                    <td>db.t3.small</td>
+                    <td><span class="tag red">미암호화</span></td>
+                    <td><span class="tag red">높음 (레거시)</span></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="summary-box warn" style="margin-top:12px">
+                <div class="sb-title">⚠️ RDS 암호화는 생성 후 변경이 안 돼요</div>
+                <div class="sb-body">스냅샷 → 새 암호화 인스턴스로 복원하는 방식으로 마이그레이션이 필요해요. 개발팀에 일정을 잡아달라고 요청하세요.</div>
+              </div>
+              <div class="action-row">
+                <button class="action-btn primary">📨 개발팀에 마이그레이션 요청</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ops View -->
+    <div class="messages" id="view-ops" style="display:none">
+      <div class="date-div">2026년 6월 5일 · 월요일 오전</div>
+
+      <div class="msg-user">
+        <div class="user-bubble">스테이징 서버 주말에도 켜져 있었어?</div>
+      </div>
+
+      <div class="msg-ai">
+        <div class="ai-avatar">🤖</div>
+        <div class="ai-body">
+          <div class="ai-name">AWS 인프라 어시스턴트</div>
+          <div class="ai-text">
+            <div class="answer-card">
+              <div class="ac-head">
+                <div>
+                  <div class="ac-title">📅 이번 주말 스테이징 서버 가동 현황</div>
+                  <div class="ac-sub">6월 1일(토) ~ 6월 2일(일) · env=staging 태그 기준</div>
+                </div>
+              </div>
+
+              <div class="kpi-row col3">
+                <div class="kpi red">
+                  <div class="kpi-val">5개</div>
+                  <div class="kpi-label">주말 내내 켜져 있었음</div>
+                </div>
+                <div class="kpi yellow">
+                  <div class="kpi-val">$87</div>
+                  <div class="kpi-label">주말 낭비 비용 (이번 주)</div>
+                </div>
+                <div class="kpi green">
+                  <div class="kpi-val">$348</div>
+                  <div class="kpi-label">월 절감 가능 (자동 스케줄)</div>
+                </div>
+              </div>
+
+              <table class="bt">
+                <thead><tr><th>서버</th><th>토요일</th><th>일요일</th><th>주말 비용</th><th>접속 기록</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><strong>stg-api-01</strong></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td>$18.4</td>
+                    <td><span class="tag green">없음</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>stg-api-02</strong></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td>$18.4</td>
+                    <td><span class="tag green">없음</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>stg-web</strong></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td>$9.2</td>
+                    <td><span class="tag green">없음</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>stg-db</strong></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td>$32.6</td>
+                    <td><span class="tag yellow">1회 (토 03:12)</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>stg-cache</strong></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td><span class="tag red">켜짐 (24h)</span></td>
+                    <td>$8.1</td>
+                    <td><span class="tag green">없음</span></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="summary-box warn" style="margin-top:14px">
+                <div class="sb-title">💡 평일 야간 + 주말 자동 종료하면 월 $348 절감</div>
+                <div class="sb-body">stg-db는 토요일 새벽 1회 접속이 있었어요. 배치 작업일 가능성이 있으니 개발팀 확인 후 스케줄 설정하세요. 나머지 4개는 바로 자동화 적용 가능해요.</div>
+              </div>
+
+              <div class="action-row">
+                <button class="action-btn primary">⏰ 평일 09-18시만 자동 운영 설정</button>
+                <button class="action-btn">📨 개발팀에 stg-db 배치 확인 요청</button>
+              </div>
+            </div>
+
+            <div class="followup">
+              <div class="followup-label">이어서 확인해보세요</div>
+              <div class="chips">
+                <span class="chip">prod 서버도 비슷한 거 있어?</span>
+                <span class="chip">어제 밤 알람 있었어?</span>
+                <span class="chip">지금 CPU 높은 서버 있어?</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="input-area">
+      <div class="input-row">
+        <span>💬</span>
+        <input type="text" id="chat-input" placeholder="궁금한 것을 물어보세요. 예: 이번 달 비용 많이 나오는 서버 어디야?">
+        <button class="send-btn">↑</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setPersona(btn, type) {
+  document.querySelectorAll('.persona-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  ['cfo','security','ops'].forEach(v => {
+    document.getElementById('view-'+v).style.display = v===type ? 'block' : 'none';
+  });
+
+  const titles = {
+    cfo: ['AWS 비용 현황 분석','2026년 6월 · CFO 뷰'],
+    security: ['보안 점검 현황','2026년 6월 · 보안 담당자 뷰'],
+    ops: ['인프라 운영 현황','2026년 6월 · 팀장 뷰']
+  };
+  const placeholders = {
+    cfo: '예: 이번 달 비용 왜 올랐어? / 팀별로 얼마씩 써?',
+    security: '예: 외부에서 접근 가능한 서버 있어? / S3 퍼블릭 버킷 있어?',
+    ops: '예: 어젯밤 알람 있었어? / 지금 CPU 높은 서버 어디야?'
+  };
+  const sbItems = {
+    cfo: '이번 달 비용 분석',
+    security: '외부 노출 서버 점검',
+    ops: '스테이징 서버 현황'
+  };
+
+  document.getElementById('ph-title').textContent = titles[type][0];
+  document.getElementById('ph-sub').textContent = titles[type][1];
+  document.getElementById('chat-input').placeholder = placeholders[type];
+  document.getElementById('sb-active').textContent = sbItems[type];
+}
+
+function toggleSql(el) {
+  const code = el.nextElementSibling;
+  const isOpen = code.classList.toggle('open');
+  el.querySelector('span').textContent = isOpen ? '▼' : '▶';
+}
+
+// Cost trend chart
+new Chart(document.getElementById('costTrend'), {
+  type: 'bar',
+  data: {
+    labels: ['1월','2월','3월','4월','5월','6월(현재)'],
+    datasets: [
+      { label: '월 비용', data: [3200, 3100, 3350, 3500, 3719, 4182],
+        backgroundColor: ['#bee3f8','#bee3f8','#bee3f8','#bee3f8','#bee3f8','#fc8181'],
+        borderRadius: 6 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false },
+      annotation: {} },
+    scales: {
+      x: { ticks: { color: '#a0aec0', font: { size: 11 } }, grid: { display: false } },
+      y: { ticks: { color: '#a0aec0', font: { size: 11 }, callback: v => '$'+v.toLocaleString() }, grid: { color: '#f7fafc' } }
+    }
+  }
+});
+</script>
+</body>
+</html>

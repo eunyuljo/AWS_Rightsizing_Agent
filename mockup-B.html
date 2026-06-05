@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Infra Chat — Design B (Light SaaS)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; background:#f8fafc; color:#1e293b; display:flex; height:100vh; overflow:hidden; }
+
+  /* Sidebar */
+  .sidebar { width:220px; background:#fff; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; flex-shrink:0; }
+  .logo { padding:18px 16px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #f1f5f9; }
+  .logo-mark { width:30px; height:30px; background:linear-gradient(135deg,#f59e0b,#ef4444); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; color:#fff; font-weight:800; }
+  .logo-text { font-size:13px; font-weight:700; color:#0f172a; }
+  .logo-sub { font-size:10px; color:#94a3b8; }
+  .nav-section { padding:16px 10px 4px; font-size:10px; font-weight:600; color:#94a3b8; letter-spacing:.08em; text-transform:uppercase; }
+  .nav-item { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; margin:1px 6px; font-size:13px; color:#64748b; cursor:pointer; transition:all .15s; }
+  .nav-item:hover { background:#f1f5f9; color:#0f172a; }
+  .nav-item.active { background:#eff6ff; color:#2563eb; font-weight:500; }
+  .nav-item .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .nav-badge { margin-left:auto; background:#fee2e2; color:#ef4444; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:600; }
+  .nav-footer { margin-top:auto; padding:12px; border-top:1px solid #f1f5f9; }
+  .user-chip { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; }
+  .avatar { width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#6366f1,#8b5cf6); display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; font-weight:700; }
+  .user-info { font-size:12px; font-weight:500; color:#0f172a; }
+  .user-role { font-size:10px; color:#94a3b8; }
+
+  /* Main */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Header */
+  .header { background:#fff; border-bottom:1px solid #e2e8f0; padding:0 24px; display:flex; align-items:center; gap:0; height:48px; }
+  .tab { padding:0 16px; height:48px; display:flex; align-items:center; font-size:13px; font-weight:500; color:#94a3b8; cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; gap:6px; }
+  .tab.active { color:#2563eb; border-bottom-color:#2563eb; }
+  .header-right { margin-left:auto; display:flex; gap:8px; }
+  .hbtn { font-size:12px; padding:6px 12px; border-radius:7px; border:1px solid #e2e8f0; background:#fff; color:#64748b; cursor:pointer; display:flex; align-items:center; gap:5px; }
+  .hbtn.accent { background:#2563eb; color:#fff; border-color:#2563eb; }
+
+  /* Chat */
+  .chat-wrap { flex:1; display:flex; overflow:hidden; }
+  .chat-col { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .messages { flex:1; overflow-y:auto; padding:32px 0; }
+  .messages::-webkit-scrollbar { width:4px; }
+  .messages::-webkit-scrollbar-thumb { background:#e2e8f0; border-radius:2px; }
+
+  .msg { max-width:800px; margin:0 auto 28px; padding:0 32px; }
+  .msg.user { text-align:right; }
+  .ububble { display:inline-block; background:#2563eb; color:#fff; padding:10px 16px; border-radius:18px 18px 4px 18px; font-size:14px; max-width:460px; text-align:left; line-height:1.5; }
+  .a-row { display:flex; gap:10px; align-items:flex-start; }
+  .a-avatar { width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg,#f59e0b,#ef4444); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; margin-top:2px; }
+  .a-body { flex:1; }
+  .a-name { font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:6px; }
+  .a-text { font-size:14px; color:#334155; line-height:1.7; }
+
+  /* SQL pill */
+  .sql-pill { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; margin:10px 0; overflow:hidden; }
+  .sql-top { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; }
+  .sql-tag { font-size:11px; font-weight:600; color:#2563eb; font-family:monospace; display:flex; align-items:center; gap:6px; }
+  .sql-tag::before { content:''; display:block; width:6px; height:6px; border-radius:50%; background:#2563eb; }
+  .sql-actions { display:flex; gap:6px; }
+  .sql-btn { font-size:11px; padding:3px 8px; border-radius:5px; border:1px solid #e2e8f0; background:#fff; color:#64748b; cursor:pointer; }
+  .sql-code { padding:14px 16px; font-family:'SF Mono',Monaco,monospace; font-size:12px; line-height:1.7; color:#334155; overflow-x:auto; }
+  .kw { color:#7c3aed; font-weight:600; } .fn { color:#059669; } .str { color:#d97706; } .cm { color:#94a3b8; }
+
+  /* Result card */
+  .result-card { border:1px solid #e2e8f0; border-radius:12px; margin:10px 0; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .rc-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #f1f5f9; }
+  .rc-title { font-size:13px; font-weight:600; color:#0f172a; }
+  .rc-meta { font-size:11px; color:#94a3b8; margin-top:2px; }
+  .rc-btns { display:flex; gap:6px; }
+  .rc-btn { font-size:11px; padding:5px 10px; border-radius:7px; border:1px solid #e2e8f0; background:#fff; color:#64748b; cursor:pointer; }
+  .rc-btn.blue { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; font-weight:500; }
+  .rc-body { padding:16px; }
+
+  /* Table */
+  table.rt { width:100%; border-collapse:collapse; font-size:12px; }
+  table.rt th { background:#f8fafc; padding:8px 12px; text-align:left; font-size:11px; font-weight:600; color:#64748b; border-bottom:1px solid #e2e8f0; letter-spacing:.04em; }
+  table.rt td { padding:9px 12px; border-bottom:1px solid #f8fafc; color:#334155; }
+  table.rt tr:last-child td { border-bottom:none; }
+  table.rt tr:hover td { background:#f8fafc; }
+  .badge { font-size:10px; font-weight:600; padding:2px 8px; border-radius:6px; }
+  .badge.red { background:#fef2f2; color:#dc2626; }
+  .badge.yellow { background:#fffbeb; color:#d97706; }
+  .badge.green { background:#f0fdf4; color:#16a34a; }
+
+  /* Insight */
+  .insight { background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 16px; margin:10px 0; font-size:13px; color:#1d4ed8; }
+  .insight-head { font-weight:700; margin-bottom:6px; }
+  .insight ul { padding-left:16px; }
+  .insight li { margin-bottom:4px; line-height:1.6; color:#1e40af; }
+
+  /* Chart */
+  .chart-wrap { padding:0 4px 4px; }
+
+  /* Input */
+  .input-area { padding:16px 24px 20px; background:#fff; border-top:1px solid #e2e8f0; }
+  .input-inner { max-width:800px; margin:0 auto; }
+  .chips { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .chip { background:#f1f5f9; border:1px solid #e2e8f0; color:#64748b; padding:5px 12px; border-radius:20px; font-size:12px; cursor:pointer; transition:all .15s; }
+  .chip:hover { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
+  .input-box { display:flex; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px; padding:10px 12px; gap:10px; transition:border-color .15s; }
+  .input-box:focus-within { border-color:#2563eb; background:#fff; }
+  .input-box input { flex:1; background:none; border:none; outline:none; font-size:14px; color:#0f172a; font-family:inherit; }
+  .input-box input::placeholder { color:#94a3b8; }
+  .send { background:#2563eb; color:#fff; border:none; width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .send:hover { background:#1d4ed8; }
+
+  /* Dashboard view */
+  .dash-view { flex:1; overflow-y:auto; padding:24px; display:none; background:#f8fafc; }
+  .dash-view::-webkit-scrollbar { width:4px; }
+  .dash-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .dash-title { font-size:18px; font-weight:700; color:#0f172a; }
+  .dash-controls { display:flex; gap:8px; }
+  .select { background:#fff; border:1px solid #e2e8f0; color:#64748b; padding:6px 10px; border-radius:8px; font-size:12px; }
+  .btn-blue { background:#2563eb; color:#fff; border:none; padding:7px 14px; border-radius:8px; font-size:12px; cursor:pointer; font-weight:500; }
+
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .kpi-label { font-size:11px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; }
+  .kpi-val { font-size:26px; font-weight:800; color:#0f172a; margin:6px 0 4px; }
+  .kpi-change { font-size:12px; font-weight:500; }
+  .kpi-change.bad { color:#dc2626; }
+  .kpi-change.good { color:#16a34a; }
+
+  .grid2 { display:grid; grid-template-columns:3fr 2fr; gap:12px; margin-bottom:12px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px; }
+  .dcard { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .dcard-title { font-size:12px; font-weight:600; color:#64748b; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+
+  /* Topology */
+  .topo-view { flex:1; display:none; overflow:hidden; position:relative; background:#f8fafc; }
+  .topo-node { position:absolute; background:#fff; border:1.5px solid #e2e8f0; border-radius:12px; padding:12px 16px; font-size:12px; cursor:pointer; transition:all .2s; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.06); min-width:110px; }
+  .topo-node:hover { box-shadow:0 4px 12px rgba(37,99,235,.15); border-color:#93c5fd; transform:translateY(-1px); }
+  .topo-node .ni { font-size:20px; display:block; margin-bottom:4px; }
+  .topo-node .nn { font-size:12px; font-weight:600; color:#0f172a; }
+  .topo-node .ns { font-size:10px; color:#94a3b8; margin-top:2px; }
+  .topo-node.vpc-box { background:#eff6ff22; border:2px dashed #3b82f6; border-radius:16px; pointer-events:none; }
+  .topo-svg { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+  .topo-legend { position:absolute; bottom:20px; right:20px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 16px; font-size:11px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">A</div>
+    <div><div class="logo-text">InfraChat</div><div class="logo-sub">AWS 인프라 분석</div></div>
+  </div>
+
+  <div class="nav-section">채팅</div>
+  <div class="nav-item active"><div class="dot"></div> EC2 비용 분석</div>
+  <div class="nav-item"><div class="dot"></div> 보안 취약점 조회</div>
+  <div class="nav-item"><div class="dot"></div> VPC 구성 확인</div>
+
+  <div class="nav-section">대시보드</div>
+  <div class="nav-item" onclick="go('dash')"><div class="dot"></div> 비용 현황</div>
+  <div class="nav-item" onclick="go('dash')"><div class="dot"></div> 보안 <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="go('topo')"><div class="dot"></div> 인프라 토폴로지</div>
+
+  <div class="nav-section">설정</div>
+  <div class="nav-item"><div class="dot"></div> AWS 계정 연결</div>
+  <div class="nav-item"><div class="dot"></div> 환경설정</div>
+
+  <div class="nav-footer">
+    <div class="user-chip">
+      <div class="avatar">E</div>
+      <div><div class="user-info">eunyuljo</div><div class="user-role">Admin</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="header">
+    <div class="tab active" id="t-chat" onclick="go('chat')">💬 채팅</div>
+    <div class="tab" id="t-dash" onclick="go('dash')">📊 대시보드</div>
+    <div class="tab" id="t-topo" onclick="go('topo')">🗺 토폴로지</div>
+    <div class="header-right">
+      <button class="hbtn">ap-northeast-2 ▾</button>
+      <button class="hbtn accent">+ 대시보드 추가</button>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-wrap" id="v-chat">
+    <div class="chat-col">
+      <div class="messages">
+
+        <!-- user -->
+        <div class="msg user">
+          <div class="ububble">퍼블릭 서브넷에 있으면서 0.0.0.0/0 허용된 EC2 찾아줘</div>
+        </div>
+
+        <!-- assistant -->
+        <div class="msg">
+          <div class="a-row">
+            <div class="a-avatar">☁</div>
+            <div class="a-body">
+              <div class="a-name">AWS Infra Agent · 방금 전</div>
+              <div class="a-text">
+                <div class="sql-pill">
+                  <div class="sql-top">
+                    <div class="sql-tag">Steampipe SQL</div>
+                    <div class="sql-actions">
+                      <button class="sql-btn">복사</button>
+                      <button class="sql-btn">실행</button>
+                    </div>
+                  </div>
+                  <div class="sql-code">
+<span class="kw">SELECT</span> i.instance_id, i.tags->><span class="str">'Name'</span> <span class="kw">AS</span> name,
+       i.instance_type, i.public_ip_address,
+       sg.group_name, sub.cidr_block
+<span class="kw">FROM</span>   aws_ec2_instance i
+<span class="kw">JOIN</span>   aws_vpc_security_group sg <span class="kw">ON</span> sg.group_id <span class="fn">= ANY</span>(i.security_group_ids)
+<span class="kw">JOIN</span>   aws_vpc_subnet sub <span class="kw">ON</span> sub.subnet_id = i.subnet_id
+<span class="kw">WHERE</span>  sub.map_public_ip_on_launch = <span class="str">true</span>
+  <span class="kw">AND</span>  sg.ingress_cidr_blocks <span class="fn">@></span> <span class="str">'["0.0.0.0/0"]'</span>
+  <span class="kw">AND</span>  i.instance_state = <span class="str">'running'</span>;</div>
+                </div>
+
+                <div class="result-card">
+                  <div class="rc-head">
+                    <div>
+                      <div class="rc-title">인터넷 노출 EC2 — 4개 발견</div>
+                      <div class="rc-meta">2026-06-05 14:32 · ap-northeast-2</div>
+                    </div>
+                    <div class="rc-btns">
+                      <button class="rc-btn blue">대시보드에 추가</button>
+                      <button class="rc-btn">CSV</button>
+                    </div>
+                  </div>
+                  <div class="rc-body">
+                    <table class="rt">
+                      <thead><tr><th>ID</th><th>Name</th><th>타입</th><th>퍼블릭 IP</th><th>보안그룹</th><th>위험도</th></tr></thead>
+                      <tbody>
+                        <tr><td style="font-family:monospace;font-size:11px">i-0a3f2b91</td><td>prod-web-01</td><td>t3.medium</td><td>52.78.12.34</td><td>sg-web-public</td><td><span class="badge red">높음</span></td></tr>
+                        <tr><td style="font-family:monospace;font-size:11px">i-0b4c3d82</td><td>prod-web-02</td><td>t3.medium</td><td>52.78.56.78</td><td>sg-web-public</td><td><span class="badge red">높음</span></td></tr>
+                        <tr><td style="font-family:monospace;font-size:11px">i-0c5d4e93</td><td>dev-bastion</td><td>t3.small</td><td>13.125.88.91</td><td>sg-bastion</td><td><span class="badge yellow">중간</span></td></tr>
+                        <tr><td style="font-family:monospace;font-size:11px">i-0d6e5f04</td><td>test-server</td><td>t2.micro</td><td>3.36.144.22</td><td>sg-open-all</td><td><span class="badge red">높음</span></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="insight">
+                  <div class="insight-head">⚠️ 보안 분석</div>
+                  <ul>
+                    <li><strong>test-server</strong>는 sg-open-all로 전 포트가 인터넷에 노출. 즉시 조치 필요.</li>
+                    <li><strong>prod-web-01/02</strong>는 22번 포트도 개방. ALB 뒤로 이동 권고.</li>
+                    <li><strong>dev-bastion</strong>은 사무실 IP로 접근 제한 권고.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- user 2 -->
+        <div class="msg user">
+          <div class="ububble">인스턴스별 월 예상 비용 바차트로 보여줘</div>
+        </div>
+
+        <!-- assistant 2 -->
+        <div class="msg">
+          <div class="a-row">
+            <div class="a-avatar">☁</div>
+            <div class="a-body">
+              <div class="a-name">AWS Infra Agent · 방금 전</div>
+              <div class="a-text">
+                <div class="result-card">
+                  <div class="rc-head">
+                    <div>
+                      <div class="rc-title">EC2 인스턴스별 월 예상 비용 (USD)</div>
+                      <div class="rc-meta">On-Demand · ap-northeast-2 · 720h 기준</div>
+                    </div>
+                    <div class="rc-btns">
+                      <button class="rc-btn blue">대시보드에 추가</button>
+                      <button class="rc-btn">PNG</button>
+                    </div>
+                  </div>
+                  <div class="rc-body chart-wrap" style="height:240px">
+                    <canvas id="costChart"></canvas>
+                  </div>
+                </div>
+                <p style="font-size:14px;color:#475569;line-height:1.6">전체 월 예상 비용 <strong style="color:#0f172a">$951</strong>. prod-api-server가 29% 차지. rightsizing 분석 볼까요?</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- user 3 -->
+        <div class="msg user">
+          <div class="ububble">prod-api-server CPU 30일 추이</div>
+        </div>
+
+        <!-- assistant 3 -->
+        <div class="msg">
+          <div class="a-row">
+            <div class="a-avatar">☁</div>
+            <div class="a-body">
+              <div class="a-name">AWS Infra Agent · 방금 전</div>
+              <div class="a-text">
+                <div class="result-card">
+                  <div class="rc-head">
+                    <div>
+                      <div class="rc-title">prod-api-server CPU 사용률 (30일)</div>
+                      <div class="rc-meta">CloudWatch · 1h avg · i-0a3f2b91</div>
+                    </div>
+                    <div class="rc-btns">
+                      <button class="rc-btn blue">대시보드에 추가</button>
+                    </div>
+                  </div>
+                  <div class="rc-body chart-wrap" style="height:200px">
+                    <canvas id="cpuChart"></canvas>
+                  </div>
+                </div>
+                <div class="insight">
+                  <div class="insight-head">📊 Rightsizing 권고 — 🟡 다운사이즈 검토</div>
+                  <ul>
+                    <li>30일 평균 CPU <strong>18.4%</strong> / 최대 <strong>41.2%</strong></li>
+                    <li>m5.2xlarge ($277) → <strong>m5.xlarge ($138)</strong> 권고</li>
+                    <li>예상 절감 <strong>$139/월 (50%)</strong></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="input-area">
+        <div class="input-inner">
+          <div class="chips">
+            <span class="chip">태그 없는 리소스</span>
+            <span class="chip">RDS 연결 수</span>
+            <span class="chip">사용 안 하는 EIP</span>
+            <span class="chip">S3 퍼블릭 버킷</span>
+          </div>
+          <div class="input-box">
+            <span>🔍</span>
+            <input type="text" placeholder="AWS 인프라에 대해 질문하세요...">
+            <button class="send">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dash-view" id="v-dash">
+    <div class="dash-top">
+      <div class="dash-title">💰 비용 현황 대시보드</div>
+      <div class="dash-controls">
+        <select class="select"><option>최근 30일</option><option>7일</option><option>이번 달</option></select>
+        <button class="btn-blue">+ 위젯 추가</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">이번 달 총 비용</div><div class="kpi-val">$4,182</div><div class="kpi-change bad">▲ 12.3% 전월 대비</div></div>
+      <div class="kpi"><div class="kpi-label">실행 중 EC2</div><div class="kpi-val">24</div><div class="kpi-change" style="color:#94a3b8">8개 리전</div></div>
+      <div class="kpi"><div class="kpi-label">절감 가능</div><div class="kpi-val" style="color:#16a34a">$861</div><div class="kpi-change good">▼ 20.6% 절감</div></div>
+      <div class="kpi"><div class="kpi-label">보안 이슈</div><div class="kpi-val" style="color:#dc2626">3</div><div class="kpi-change bad">즉시 조치 필요</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="dcard">
+        <div class="dcard-title">일별 비용 추이 <span>최근 30일</span></div>
+        <div style="height:200px"><canvas id="dDailyLine"></canvas></div>
+      </div>
+      <div class="dcard">
+        <div class="dcard-title">서비스별 비용</div>
+        <div style="height:200px"><canvas id="dPie"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div class="dcard">
+        <div class="dcard-title">리전별 비용</div>
+        <div style="height:150px"><canvas id="dRegion"></canvas></div>
+      </div>
+      <div class="dcard">
+        <div class="dcard-title">Rightsizing 권고</div>
+        <table class="rt" style="margin:0">
+          <thead><tr><th>인스턴스</th><th>현재→권고</th><th>절감</th></tr></thead>
+          <tbody>
+            <tr><td>prod-api</td><td>m5.2xl→m5.xl</td><td><span class="badge green">-$139</span></td></tr>
+            <tr><td>dev-server</td><td>t3.lg→t3.md</td><td><span class="badge green">-$33</span></td></tr>
+            <tr><td>batch-01</td><td>종료 검토</td><td><span class="badge red">-$561</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dcard">
+        <div class="dcard-title">태그 미적용 리소스</div>
+        <div style="padding-top:4px">
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;color:#334155"><span>EC2</span><span class="badge red">7개</span></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;color:#334155"><span>RDS</span><span class="badge yellow">2개</span></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;color:#334155"><span>S3</span><span class="badge yellow">5개</span></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:12px;color:#334155"><span>EIP</span><span class="badge green">0개</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Topology -->
+  <div class="topo-view" id="v-topo">
+    <svg class="topo-svg" id="tsvg"></svg>
+
+    <div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);border:2px dashed #3b82f6;border-radius:20px;width:840px;height:480px;padding:10px 16px;font-size:11px;font-weight:600;color:#3b82f6;pointer-events:none">
+      vpc-0a1b2c3d · 10.0.0.0/16 · ap-northeast-2
+    </div>
+    <div style="position:absolute;top:80px;left:120px;border:1.5px dashed #22c55e;border-radius:12px;width:300px;height:360px;padding:8px 14px;font-size:10px;color:#16a34a;pointer-events:none">퍼블릭 서브넷 10.0.1.0/24</div>
+    <div style="position:absolute;top:80px;left:470px;border:1.5px dashed #6366f1;border-radius:12px;width:320px;height:360px;padding:8px 14px;font-size:10px;color:#6366f1;pointer-events:none">프라이빗 서브넷 10.0.2.0/24</div>
+
+    <div class="topo-node" style="top:18px;left:50%;transform:translateX(-50%)"><span class="ni">🌐</span><div class="nn">Internet Gateway</div><div class="ns">igw-0a1b2c3d</div></div>
+
+    <div class="topo-node" style="top:155px;left:140px"><span class="ni">🖥</span><div class="nn">prod-web-01</div><div class="ns">t3.medium</div></div>
+    <div class="topo-node" style="top:280px;left:140px"><span class="ni">🖥</span><div class="nn">dev-bastion</div><div class="ns">t3.small</div></div>
+
+    <div class="topo-node" style="top:155px;left:360px;border-color:#f59e0b"><span class="ni">⚖️</span><div class="nn">prod-alb</div><div class="ns">Application LB</div></div>
+
+    <div class="topo-node" style="top:155px;left:510px"><span class="ni">🖥</span><div class="nn">prod-api-server</div><div class="ns">m5.2xlarge</div></div>
+    <div class="topo-node" style="top:295px;left:510px" style="border-color:#8b5cf6"><span class="ni">🗄</span><div class="nn">prod-rds-mysql</div><div class="ns">db.r5.large</div></div>
+
+    <div class="topo-legend">
+      <div style="font-weight:600;color:#0f172a;margin-bottom:8px;font-size:12px">범례</div>
+      <div style="font-size:11px;color:#64748b;display:flex;flex-direction:column;gap:4px">
+        <div>🖥 EC2 &nbsp; 🗄 RDS &nbsp; ⚖️ ALB &nbsp; 🌐 IGW</div>
+        <div style="color:#22c55e">── 퍼블릭 서브넷</div>
+        <div style="color:#6366f1">── 프라이빗 서브넷</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function go(v) {
+  ['chat','dash','topo'].forEach(x => {
+    document.getElementById('v-'+x).style.display = 'none';
+    const t = document.getElementById('t-'+x);
+    if (t) t.classList.remove('active');
+  });
+  document.getElementById('v-'+v).style.display = v==='chat'?'flex':'block';
+  const t = document.getElementById('t-'+v);
+  if (t) t.classList.add('active');
+  if (v==='dash') renderDash();
+}
+
+// Cost bar
+new Chart(document.getElementById('costChart'), {
+  type:'bar',
+  data:{
+    labels:['prod-api','prod-web-01','prod-rds','batch-01','dev-server','staging','test'],
+    datasets:[{label:'월 비용(USD)',data:[277,138,198,210,66,44,18],
+      backgroundColor:['#ef4444','#f97316','#8b5cf6','#f97316','#3b82f6','#3b82f6','#94a3b8'],borderRadius:5}]
+  },
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+    scales:{x:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#f1f5f9'}},
+            y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#f1f5f9'}}}}
+});
+
+// CPU line
+const l30=Array.from({length:30},(_,i)=>{const d=new Date('2026-05-06');d.setDate(d.getDate()+i);return `${d.getMonth()+1}/${d.getDate()}`;});
+const cpu=l30.map((_,i)=>+(12+Math.sin(i*.4)*8+Math.random()*5).toFixed(1));
+cpu[8]=38;cpu[9]=41.2;cpu[22]=35;
+new Chart(document.getElementById('cpuChart'),{
+  type:'line',
+  data:{labels:l30,datasets:[
+    {label:'CPU 평균(%)',data:cpu,borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,.06)',tension:.4,pointRadius:0,fill:true},
+    {label:'임계값(70%)',data:Array(30).fill(70),borderColor:'#ef4444',borderDash:[4,4],pointRadius:0,fill:false}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+    scales:{x:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#f1f5f9'}},
+            y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#f1f5f9'}}}}
+});
+
+let dashDone=false;
+function renderDash(){
+  if(dashDone)return;dashDone=true;
+  const sc={x:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#f1f5f9'}},y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{color:'#f1f5f9'}}};
+  const days=l30.slice(-14).map((x,i)=>i%2===0?x:'');
+  new Chart(document.getElementById('dDailyLine'),{type:'line',data:{labels:l30,datasets:[{label:'일별 비용',data:l30.map(()=>+(100+Math.random()*60).toFixed(0)),borderColor:'#2563eb',tension:.4,pointRadius:0,fill:true,backgroundColor:'rgba(37,99,235,.06)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:sc}});
+  new Chart(document.getElementById('dPie'),{type:'doughnut',data:{labels:['EC2','RDS','S3','Transfer','기타'],datasets:[{data:[2847,892,234,156,53],backgroundColor:['#3b82f6','#8b5cf6','#f97316','#10b981','#94a3b8'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#64748b',font:{size:11},boxWidth:12}}}}});
+  new Chart(document.getElementById('dRegion'),{type:'bar',data:{labels:['ap-ne-2','us-east-1','eu-west-1','ap-se-1'],datasets:[{label:'비용',data:[2841,892,321,128],backgroundColor:'#6366f1',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:sc}});
+}
+</script>
+</body>
+</html>

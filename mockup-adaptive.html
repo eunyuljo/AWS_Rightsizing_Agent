@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Infra Chat — 자동 적응형</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo',sans-serif; background:#f0f2f5; color:#1a202c; display:flex; height:100vh; overflow:hidden; }
+
+  /* Sidebar */
+  .sidebar { width:220px; background:#1c1f2e; display:flex; flex-direction:column; flex-shrink:0; }
+  .sb-logo { padding:18px 16px; border-bottom:1px solid #2d3148; display:flex; align-items:center; gap:10px; }
+  .sb-logo-icon { width:32px; height:32px; background:linear-gradient(135deg,#667eea,#764ba2); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .sb-logo-text { font-size:13px; font-weight:700; color:#fff; }
+  .sb-logo-sub { font-size:10px; color:#64748b; }
+  .sb-sec { font-size:10px; font-weight:700; color:#475569; letter-spacing:.08em; text-transform:uppercase; padding:14px 14px 4px; }
+  .sb-item { display:flex; align-items:center; gap:8px; padding:8px 14px; font-size:12px; color:#94a3b8; cursor:pointer; transition:all .15s; border-radius:0; }
+  .sb-item:hover { background:#2d3148; color:#e2e8f0; }
+  .sb-item.active { background:#2d3148; color:#e2e8f0; }
+  .sb-item .ic { font-size:13px; width:18px; text-align:center; }
+  .sb-badge { margin-left:auto; background:#ef4444; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:8px; }
+  .sb-bottom { margin-top:auto; padding:12px 14px; border-top:1px solid #2d3148; font-size:11px; color:#475569; display:flex; align-items:center; gap:8px; }
+  .sb-avatar { width:26px; height:26px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; font-weight:700; }
+
+  /* Main */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Top bar */
+  .topbar { background:#fff; border-bottom:1px solid #e2e8f0; padding:12px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .tb-title { font-size:14px; font-weight:700; color:#1a202c; }
+  .tb-sub { font-size:11px; color:#94a3b8; margin-top:2px; }
+  .tb-right { display:flex; gap:8px; align-items:center; }
+  .tb-chip { font-size:11px; padding:4px 10px; border-radius:6px; background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+  .tb-chip.green { background:#f0fdf4; color:#16a34a; border-color:#bbf7d0; }
+
+  /* Style indicator — 핵심 UI */
+  .style-badge { display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700; padding:3px 8px; border-radius:12px; margin-bottom:8px; }
+  .style-badge.biz { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; }
+  .style-badge.tech { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
+  .style-badge.mid { background:#fefce8; color:#ca8a04; border:1px solid #fef08a; }
+
+  /* Messages */
+  .messages { flex:1; overflow-y:auto; padding:28px 0; }
+  .messages::-webkit-scrollbar { width:4px; }
+  .messages::-webkit-scrollbar-thumb { background:#e2e8f0; border-radius:2px; }
+
+  .msg-wrap { max-width:780px; margin:0 auto 28px; padding:0 28px; }
+
+  /* User bubble */
+  .msg-user { display:flex; justify-content:flex-end; }
+  .user-bubble { background:#4f46e5; color:#fff; padding:11px 18px; border-radius:20px 20px 4px 20px; font-size:14px; max-width:440px; line-height:1.5; }
+
+  /* AI response */
+  .msg-ai { display:flex; gap:12px; align-items:flex-start; }
+  .ai-ava { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; margin-top:2px; }
+  .ai-body { flex:1; }
+  .ai-meta { font-size:11px; color:#94a3b8; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .ai-meta .dot { width:3px; height:3px; border-radius:50%; background:#d1d5db; }
+
+  /* ── 비즈니스 스타일 카드 ── */
+  .biz-card { background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+  .bc-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+  .bc-title { font-size:15px; font-weight:700; color:#1a202c; line-height:1.4; }
+  .bc-sub { font-size:11px; color:#94a3b8; margin-top:3px; }
+  .bc-actions { display:flex; gap:6px; flex-shrink:0; margin-left:12px; }
+  .bc-btn { font-size:11px; padding:5px 12px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#64748b; cursor:pointer; white-space:nowrap; }
+  .bc-btn.primary { background:#4f46e5; color:#fff; border-color:#4f46e5; }
+
+  .kpi-grid { display:grid; gap:10px; margin-bottom:14px; }
+  .kpi-grid.g4 { grid-template-columns:repeat(4,1fr); }
+  .kpi-grid.g3 { grid-template-columns:repeat(3,1fr); }
+  .kpi { border-radius:12px; padding:14px 16px; }
+  .kpi.blue { background:#eff6ff; border:1px solid #bfdbfe; }
+  .kpi.red { background:#fff1f2; border:1px solid #fecdd3; }
+  .kpi.green { background:#f0fdf4; border:1px solid #bbf7d0; }
+  .kpi.amber { background:#fffbeb; border:1px solid #fde68a; }
+  .kpi-val { font-size:22px; font-weight:800; color:#1a202c; }
+  .kpi.red .kpi-val { color:#dc2626; }
+  .kpi.green .kpi-val { color:#16a34a; }
+  .kpi.amber .kpi-val { color:#d97706; }
+  .kpi.blue .kpi-val { color:#2563eb; }
+  .kpi-label { font-size:11px; color:#64748b; margin-top:4px; }
+  .kpi-delta { font-size:11px; font-weight:600; margin-top:3px; }
+
+  .cause-box { border-left:3px solid #f87171; background:#fff1f2; border-radius:0 10px 10px 0; padding:12px 16px; margin:12px 0; }
+  .cause-box.warn { border-color:#fbbf24; background:#fffbeb; }
+  .cause-box.info { border-color:#60a5fa; background:#eff6ff; }
+  .cause-box.success { border-color:#34d399; background:#f0fdf4; }
+  .cause-title { font-size:12px; font-weight:700; color:#1a202c; margin-bottom:6px; }
+  .cause-body { font-size:13px; color:#374151; line-height:1.6; }
+  .cause-body ul { padding-left:16px; }
+  .cause-body li { margin-bottom:4px; }
+
+  .action-row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .act-btn { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:7px 14px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#374151; cursor:pointer; transition:all .15s; }
+  .act-btn:hover { background:#f8fafc; }
+  .act-btn.primary { background:#4f46e5; color:#fff; border-color:#4f46e5; }
+  .act-btn.primary:hover { background:#4338ca; }
+
+  .sql-toggle { display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; cursor:pointer; margin-top:10px; user-select:none; width:fit-content; }
+  .sql-toggle:hover { color:#64748b; }
+  .sql-panel { display:none; background:#1e1e2e; border-radius:10px; margin-top:6px; overflow:hidden; }
+  .sql-panel.open { display:block; }
+  .sql-panel-head { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:#2d2d3f; }
+  .sql-panel-lang { font-size:10px; font-weight:700; color:#a78bfa; font-family:monospace; }
+  .sql-panel-copy { font-size:10px; color:#64748b; cursor:pointer; }
+  .sql-panel-body { padding:14px 16px; font-family:'SF Mono',Monaco,monospace; font-size:12px; line-height:1.8; color:#cdd6f4; overflow-x:auto; }
+  .kw { color:#cba6f7; } .fn { color:#a6e3a1; } .str { color:#f9e2af; } .cm { color:#6c7086; }
+
+  /* ── 기술 스타일 카드 ── */
+  .tech-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .tc-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+  .tc-title { font-size:13px; font-weight:600; color:#1a202c; }
+  .tc-meta { font-size:11px; color:#94a3b8; }
+  .tc-btns { display:flex; gap:6px; }
+  .tc-btn { font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid #e2e8f0; background:#fff; color:#64748b; cursor:pointer; }
+  .tc-btn.blue { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; font-weight:500; }
+  .tc-body { padding:0; }
+
+  table.dt { width:100%; border-collapse:collapse; font-size:12px; }
+  table.dt th { background:#f8fafc; padding:9px 14px; text-align:left; font-size:11px; font-weight:600; color:#64748b; border-bottom:1px solid #e2e8f0; letter-spacing:.04em; white-space:nowrap; }
+  table.dt td { padding:10px 14px; border-bottom:1px solid #f8fafc; color:#374151; font-family:-apple-system,monospace; font-size:12px; }
+  table.dt tr:last-child td { border-bottom:none; }
+  table.dt tr:hover td { background:#f8fafc; }
+  .tag { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:5px; }
+  .tag.red { background:#fff1f2; color:#dc2626; border:1px solid #fecdd3; }
+  .tag.yellow { background:#fffbeb; color:#d97706; border:1px solid #fde68a; }
+  .tag.green { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
+  .tag.blue { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; }
+
+  .chart-block { padding:16px; }
+
+  /* ── 후속 질문 칩 ── */
+  .followup { margin-top:12px; }
+  .fu-label { font-size:11px; color:#94a3b8; margin-bottom:6px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:12px; padding:6px 12px; border-radius:16px; border:1px solid #e2e8f0; background:#fff; color:#4f46e5; cursor:pointer; transition:all .15s; }
+  .chip:hover { background:#eff6ff; border-color:#bfdbfe; }
+
+  /* ── 입력창 ── */
+  .input-area { background:#fff; border-top:1px solid #e2e8f0; padding:14px 24px 18px; flex-shrink:0; }
+  .input-inner { max-width:780px; margin:0 auto; }
+  .input-box { display:flex; align-items:center; gap:10px; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:14px; padding:10px 14px; transition:border-color .15s; }
+  .input-box:focus-within { border-color:#6366f1; background:#fff; }
+  .input-box input { flex:1; background:none; border:none; outline:none; font-size:14px; color:#1a202c; font-family:inherit; }
+  .input-box input::placeholder { color:#94a3b8; }
+  .send-btn { width:34px; height:34px; border-radius:10px; background:#4f46e5; color:#fff; border:none; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .send-btn:hover { background:#4338ca; }
+
+  /* Big savings card */
+  .savings-card { background:linear-gradient(135deg,#4f46e5,#7c3aed); border-radius:16px; padding:24px; color:#fff; text-align:center; }
+  .sv-label { font-size:12px; opacity:.8; margin-bottom:8px; }
+  .sv-amount { font-size:48px; font-weight:900; letter-spacing:-.02em; }
+  .sv-period { font-size:13px; opacity:.7; margin-top:4px; }
+  .sv-breakdown { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:20px; }
+  .sv-item { background:rgba(255,255,255,.12); border-radius:10px; padding:12px; }
+  .sv-item-val { font-size:18px; font-weight:800; }
+  .sv-item-label { font-size:10px; opacity:.75; margin-top:3px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">☁</div>
+    <div>
+      <div class="sb-logo-text">InfraChat</div>
+      <div class="sb-logo-sub">AWS 인프라 어시스턴트</div>
+    </div>
+  </div>
+
+  <div class="sb-sec">최근 대화</div>
+  <div class="sb-item active"><span class="ic">💬</span> 비용 분석 & rightsizing</div>
+  <div class="sb-item"><span class="ic">💬</span> 보안 취약점 점검</div>
+  <div class="sb-item"><span class="ic">💬</span> VPC 구성 확인</div>
+  <div class="sb-item"><span class="ic">💬</span> RDS 성능 분석</div>
+
+  <div class="sb-sec">저장된 쿼리</div>
+  <div class="sb-item"><span class="ic">🔖</span> 월간 비용 TOP10</div>
+  <div class="sb-item"><span class="ic">🔖</span> 외부 노출 서버 <span class="sb-badge">4</span></div>
+  <div class="sb-item"><span class="ic">🔖</span> 미사용 리소스</div>
+
+  <div class="sb-bottom">
+    <div class="sb-avatar">E</div>
+    <div>
+      <div style="color:#e2e8f0;font-size:12px">eunyuljo</div>
+      <div style="color:#475569;font-size:10px">Admin</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="tb-title">비용 분석 & rightsizing</div>
+      <div class="tb-sub">2026년 6월 5일 · ap-northeast-2</div>
+    </div>
+    <div class="tb-right">
+      <span class="tb-chip green">● AWS 연결됨</span>
+      <span class="tb-chip">Steampipe 3.2.1</span>
+    </div>
+  </div>
+
+  <div class="messages">
+
+    <!-- ================================================================
+         턴 1 — 비즈니스 질문 → 비즈니스 스타일 응답
+    ================================================================ -->
+    <div class="msg-wrap">
+      <div class="msg-user">
+        <div class="user-bubble">이번 달 비용 왜 이렇게 많이 나왔어?</div>
+      </div>
+    </div>
+
+    <div class="msg-wrap">
+      <div class="msg-ai">
+        <div class="ai-ava">🤖</div>
+        <div class="ai-body">
+          <div class="ai-meta">
+            <span>InfraChat</span>
+            <span class="dot"></span>
+            <span class="style-badge biz">💼 비즈니스 요약</span>
+          </div>
+
+          <div class="biz-card">
+            <div class="bc-head">
+              <div>
+                <div class="bc-title">📈 전월 대비 12.3% 증가 — 주요 원인 3가지 찾았어요</div>
+                <div class="bc-sub">분석 기간: 2026-05-06 ~ 06-05 · 실시간 데이터</div>
+              </div>
+              <div class="bc-actions">
+                <button class="bc-btn primary">리포트 저장</button>
+                <button class="bc-btn">공유</button>
+              </div>
+            </div>
+
+            <div class="kpi-grid g4">
+              <div class="kpi blue"><div class="kpi-val">$4,182</div><div class="kpi-label">이번 달 누계</div></div>
+              <div class="kpi red"><div class="kpi-val">+$463</div><div class="kpi-label">전월 대비 증가</div><div class="kpi-delta" style="color:#dc2626">▲ 12.3%</div></div>
+              <div class="kpi amber"><div class="kpi-val">$3,719</div><div class="kpi-label">지난 달 총 비용</div></div>
+              <div class="kpi green"><div class="kpi-val">$861</div><div class="kpi-label">줄일 수 있는 금액</div><div class="kpi-delta" style="color:#16a34a">▼ 20.6%</div></div>
+            </div>
+
+            <div class="cause-box">
+              <div class="cause-title">🔴 주요 원인</div>
+              <div class="cause-body">
+                <ul>
+                  <li><strong>batch-01 서버 신규 생성 ($210/월)</strong> — 5월 22일 생겼는데 30일간 CPU 2%로 거의 안 쓰고 있어요. 누가 왜 만들었는지 확인이 필요해요.</li>
+                  <li><strong>리전 간 데이터 전송 비용 급증 (+$89)</strong> — 5월 중순부터 갑자기 늘었어요. 개발팀에 원인 확인을 요청하세요.</li>
+                  <li><strong>prod-rds 스토리지 자동 확장 (+$44)</strong> — 용량이 꽉 차서 자동으로 늘어났어요.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button class="act-btn primary">💰 절감 방법 보기</button>
+              <button class="act-btn">👥 팀별로 나눠서 보기</button>
+              <button class="act-btn">📨 batch-01 용도 확인 요청</button>
+            </div>
+          </div>
+
+          <div class="sql-toggle" onclick="toggleSql(this)">
+            <span style="font-size:9px">▶</span> 어떻게 조회했는지 보기
+          </div>
+          <div class="sql-panel">
+            <div class="sql-panel-head">
+              <span class="sql-panel-lang">STEAMPIPE SQL</span>
+              <span class="sql-panel-copy">복사</span>
+            </div>
+            <div class="sql-panel-body">
+<span class="kw">SELECT</span> product_service_code,
+       <span class="fn">SUM</span>(line_item_unblended_cost) <span class="kw">AS</span> cost,
+       <span class="fn">LAG</span>(<span class="fn">SUM</span>(line_item_unblended_cost)) <span class="kw">OVER</span> (<span class="kw">ORDER BY</span> month) <span class="kw">AS</span> prev_month
+<span class="kw">FROM</span>   aws_cost_by_service
+<span class="kw">WHERE</span>  line_item_usage_start_date >= <span class="fn">NOW</span>() - <span class="fn">INTERVAL</span> <span class="str">'60 days'</span>
+<span class="kw">GROUP BY</span> 1, date_trunc(<span class="str">'month'</span>, line_item_usage_start_date)
+<span class="kw">ORDER BY</span> cost <span class="kw">DESC</span>;</div>
+          </div>
+
+          <div class="followup">
+            <div class="fu-label">이어서 물어보세요</div>
+            <div class="chips">
+              <span class="chip">절감 $861 어떻게 하면 돼?</span>
+              <span class="chip">팀별로 비용 보여줘</span>
+              <span class="chip">batch-01 누가 만들었어?</span>
+              <span class="chip">6개월 추이 그래프</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================================================================
+         턴 2 — 기술 질문 → 기술 스타일 응답
+    ================================================================ -->
+    <div class="msg-wrap">
+      <div class="msg-user">
+        <div class="user-bubble">CPU 30일 평균 20% 이하인 EC2 목록 SQL로 뽑아줘</div>
+      </div>
+    </div>
+
+    <div class="msg-wrap">
+      <div class="msg-ai">
+        <div class="ai-ava">🤖</div>
+        <div class="ai-body">
+          <div class="ai-meta">
+            <span>InfraChat</span>
+            <span class="dot"></span>
+            <span class="style-badge tech">⚙️ 기술 데이터</span>
+          </div>
+
+          <!-- SQL 기본 노출 -->
+          <div style="margin-bottom:10px">
+            <div class="sql-panel open" style="border-radius:10px">
+              <div class="sql-panel-head">
+                <span class="sql-panel-lang">STEAMPIPE SQL · 실행됨 (0.41s)</span>
+                <span class="sql-panel-copy">복사</span>
+              </div>
+              <div class="sql-panel-body">
+<span class="kw">SELECT</span> i.instance_id,
+       i.tags->><span class="str">'Name'</span>               <span class="kw">AS</span> name,
+       i.instance_type,
+       <span class="fn">ROUND</span>(avg_cpu.avg_value::numeric, 1) <span class="kw">AS</span> cpu_avg_pct,
+       <span class="fn">ROUND</span>(p.price_per_hour * 720, 2)      <span class="kw">AS</span> monthly_cost
+<span class="kw">FROM</span>   aws_ec2_instance i
+<span class="kw">JOIN</span>   aws_cloudwatch_metric_statistic_data_point avg_cpu
+       <span class="kw">ON</span>  avg_cpu.metric_name = <span class="str">'CPUUtilization'</span>
+       <span class="kw">AND</span> avg_cpu.dimension_value = i.instance_id
+       <span class="kw">AND</span> avg_cpu.period = <span class="str">86400</span>
+<span class="kw">JOIN</span>   aws_pricing_product p <span class="kw">ON</span> p.instance_type = i.instance_type
+<span class="kw">WHERE</span>  i.instance_state = <span class="str">'running'</span>
+  <span class="kw">AND</span>  avg_cpu.avg_value &lt; <span class="str">20</span>
+  <span class="kw">AND</span>  avg_cpu.timestamp >= <span class="fn">NOW</span>() - <span class="fn">INTERVAL</span> <span class="str">'30 days'</span>
+<span class="kw">ORDER BY</span> monthly_cost <span class="kw">DESC</span>;</div>
+            </div>
+          </div>
+
+          <div class="tech-card">
+            <div class="tc-head">
+              <div>
+                <div class="tc-title">조회 결과 — 7개 인스턴스 (CPU &lt; 20%)</div>
+                <div class="tc-meta">ap-northeast-2 · 30일 평균 기준</div>
+              </div>
+              <div class="tc-btns">
+                <button class="tc-btn blue">대시보드에 추가</button>
+                <button class="tc-btn">CSV</button>
+              </div>
+            </div>
+            <div class="tc-body">
+              <table class="dt">
+                <thead>
+                  <tr><th>Instance ID</th><th>Name</th><th>Type</th><th>CPU 평균</th><th>CPU 최대</th><th>월 비용</th><th>상태</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0d6e5f04</td>
+                    <td>batch-01</td>
+                    <td>c5.4xlarge</td>
+                    <td><strong style="color:#dc2626">2.1%</strong></td>
+                    <td>8.3%</td>
+                    <td><strong>$561</strong></td>
+                    <td><span class="tag red">종료 검토</span></td>
+                  </tr>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0a3f2b91</td>
+                    <td>prod-api-server</td>
+                    <td>m5.2xlarge</td>
+                    <td><strong style="color:#d97706">18.4%</strong></td>
+                    <td>41.2%</td>
+                    <td><strong>$277</strong></td>
+                    <td><span class="tag yellow">다운사이즈</span></td>
+                  </tr>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0b4c3d82</td>
+                    <td>dev-server-01</td>
+                    <td>t3.large</td>
+                    <td><strong style="color:#d97706">11.2%</strong></td>
+                    <td>28.4%</td>
+                    <td><strong>$66</strong></td>
+                    <td><span class="tag yellow">다운사이즈</span></td>
+                  </tr>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0c5d4e93</td>
+                    <td>staging-api</td>
+                    <td>t3.medium</td>
+                    <td><strong style="color:#d97706">8.7%</strong></td>
+                    <td>22.1%</td>
+                    <td><strong>$33</strong></td>
+                    <td><span class="tag yellow">다운사이즈</span></td>
+                  </tr>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0e7f6a15</td>
+                    <td>test-server</td>
+                    <td>t2.micro</td>
+                    <td><strong style="color:#dc2626">1.3%</strong></td>
+                    <td>4.2%</td>
+                    <td><strong>$9</strong></td>
+                    <td><span class="tag red">종료 검토</span></td>
+                  </tr>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0f8a7b26</td>
+                    <td>monitoring</td>
+                    <td>t3.small</td>
+                    <td>14.9%</td>
+                    <td>31.0%</td>
+                    <td><strong>$17</strong></td>
+                    <td><span class="tag green">정상</span></td>
+                  </tr>
+                  <tr>
+                    <td style="color:#6366f1;font-family:monospace">i-0a9b8c37</td>
+                    <td>backup-runner</td>
+                    <td>t3.small</td>
+                    <td>6.2%</td>
+                    <td>19.8%</td>
+                    <td><strong>$17</strong></td>
+                    <td><span class="tag green">정상 (배치)</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="chart-block">
+              <div style="height:180px"><canvas id="cpuBar"></canvas></div>
+            </div>
+          </div>
+
+          <div class="followup">
+            <div class="fu-label">이어서 물어보세요</div>
+            <div class="chips">
+              <span class="chip">그 중에 비용 제일 많이 나오는 거 3개만</span>
+              <span class="chip">batch-01 네트워크 트래픽도 봐줘</span>
+              <span class="chip">다운사이즈하면 얼마 절감돼?</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================================================================
+         턴 3 — 중간 성격 (컨텍스트 이어받기) → 간결한 테이블
+    ================================================================ -->
+    <div class="msg-wrap">
+      <div class="msg-user">
+        <div class="user-bubble">그 중에 비용 제일 많이 나오는 거 3개만</div>
+      </div>
+    </div>
+
+    <div class="msg-wrap">
+      <div class="msg-ai">
+        <div class="ai-ava">🤖</div>
+        <div class="ai-body">
+          <div class="ai-meta">
+            <span>InfraChat</span>
+            <span class="dot"></span>
+            <span class="style-badge mid">🔄 이전 결과 필터링</span>
+          </div>
+
+          <div class="tech-card">
+            <div class="tc-head">
+              <div>
+                <div class="tc-title">비용 상위 3개 (CPU &lt; 20% 중)</div>
+                <div class="tc-meta">이전 쿼리 결과에서 필터 · monthly_cost DESC</div>
+              </div>
+              <div class="tc-btns">
+                <button class="tc-btn blue">대시보드에 추가</button>
+              </div>
+            </div>
+            <div class="tc-body">
+              <table class="dt">
+                <thead>
+                  <tr><th>#</th><th>Name</th><th>Type</th><th>CPU 평균</th><th>월 비용</th><th>권고</th><th>절감 가능</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="color:#94a3b8;font-weight:700">1</td>
+                    <td><strong>batch-01</strong></td>
+                    <td>c5.4xlarge</td>
+                    <td style="color:#dc2626;font-weight:700">2.1%</td>
+                    <td style="font-weight:700">$561</td>
+                    <td><span class="tag red">종료 검토</span></td>
+                    <td style="color:#16a34a;font-weight:700">-$561</td>
+                  </tr>
+                  <tr>
+                    <td style="color:#94a3b8;font-weight:700">2</td>
+                    <td><strong>prod-api-server</strong></td>
+                    <td>m5.2xlarge → <span style="color:#4f46e5">m5.xlarge</span></td>
+                    <td style="color:#d97706;font-weight:700">18.4%</td>
+                    <td style="font-weight:700">$277</td>
+                    <td><span class="tag yellow">다운사이즈</span></td>
+                    <td style="color:#16a34a;font-weight:700">-$139</td>
+                  </tr>
+                  <tr>
+                    <td style="color:#94a3b8;font-weight:700">3</td>
+                    <td><strong>dev-server-01</strong></td>
+                    <td>t3.large → <span style="color:#4f46e5">t3.medium</span></td>
+                    <td style="color:#d97706;font-weight:700">11.2%</td>
+                    <td style="font-weight:700">$66</td>
+                    <td><span class="tag yellow">다운사이즈</span></td>
+                    <td style="color:#16a34a;font-weight:700">-$33</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="followup">
+            <div class="fu-label">이어서 물어보세요</div>
+            <div class="chips">
+              <span class="chip">절감하면 연간으로 얼마야?</span>
+              <span class="chip">batch-01 생성 이력 확인</span>
+              <span class="chip">개발팀에 조치 요청 보내줘</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================================================================
+         턴 4 — 비즈니스 질문 → 숫자 강조 카드 (SQL 숨김)
+    ================================================================ -->
+    <div class="msg-wrap">
+      <div class="msg-user">
+        <div class="user-bubble">절감하면 연간으로 얼마야?</div>
+      </div>
+    </div>
+
+    <div class="msg-wrap">
+      <div class="msg-ai">
+        <div class="ai-ava">🤖</div>
+        <div class="ai-body">
+          <div class="ai-meta">
+            <span>InfraChat</span>
+            <span class="dot"></span>
+            <span class="style-badge biz">💼 비즈니스 요약</span>
+          </div>
+
+          <div class="savings-card">
+            <div class="sv-label">3개 조치 시 연간 절감 예상액</div>
+            <div class="sv-amount">$8,796</div>
+            <div class="sv-period">월 $733 × 12개월 기준</div>
+            <div class="sv-breakdown">
+              <div class="sv-item">
+                <div class="sv-item-val">$6,732</div>
+                <div class="sv-item-label">batch-01 종료</div>
+              </div>
+              <div class="sv-item">
+                <div class="sv-item-val">$1,668</div>
+                <div class="sv-item-label">prod-api 다운사이즈</div>
+              </div>
+              <div class="sv-item">
+                <div class="sv-item-val">$396</div>
+                <div class="sv-item-label">dev-server 다운사이즈</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cause-box info" style="margin-top:12px">
+            <div class="cause-title">💡 참고</div>
+            <div class="cause-body">이 금액은 On-Demand 기준이에요. Reserved Instance나 Savings Plan을 적용하면 추가로 30~40% 더 절감할 수 있어요. 적용하면 연간 <strong>$11,000~12,000</strong>도 가능해요.</div>
+          </div>
+
+          <div class="action-row">
+            <button class="act-btn primary">📨 개발팀에 조치 요청 보내기</button>
+            <button class="act-btn">📋 경영진 보고서 생성</button>
+            <button class="act-btn">💳 Reserved Instance 시뮬레이션</button>
+          </div>
+
+          <div class="sql-toggle" onclick="toggleSql(this)">
+            <span style="font-size:9px">▶</span> 어떻게 계산했는지 보기
+          </div>
+          <div class="sql-panel">
+            <div class="sql-panel-head">
+              <span class="sql-panel-lang">계산 방식</span>
+              <span class="sql-panel-copy">복사</span>
+            </div>
+            <div class="sql-panel-body">
+<span class="cm">-- batch-01: c5.4xlarge $0.68/h × 720h = $489.6/월 → 종료 시 $0</span>
+<span class="cm">-- prod-api: m5.2xlarge($0.384/h) → m5.xlarge($0.192/h) → 절감 $138.24/월</span>
+<span class="cm">-- dev-server: t3.large($0.0832/h) → t3.medium($0.0416/h) → 절감 $29.95/월</span>
+
+월 절감: $489.6 + $138.24 + $29.95 = $657.79
+<span class="cm">-- (실제 조회값 기준으로 반올림하여 $733 표시)</span>
+연간 절감: $657.79 × 12 = <span class="str">$7,893.5</span> <span class="cm">~ $8,796</span></div>
+          </div>
+
+          <div class="followup">
+            <div class="fu-label">이어서 물어보세요</div>
+            <div class="chips">
+              <span class="chip">Reserved Instance 추천해줘</span>
+              <span class="chip">내년 예산 어떻게 짜면 돼?</span>
+              <span class="chip">다른 절감 방법 더 있어?</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /messages -->
+
+  <!-- Input -->
+  <div class="input-area">
+    <div class="input-inner">
+      <div class="input-box">
+        <span style="font-size:16px">💬</span>
+        <input type="text" placeholder="AWS 인프라에 대해 자유롭게 물어보세요. 기술적이든 비즈니스적이든 모두 괜찮아요.">
+        <button class="send-btn">↑</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleSql(el) {
+  const panel = el.nextElementSibling;
+  const isOpen = panel.classList.toggle('open');
+  el.querySelector('span').textContent = isOpen ? '▼' : '▶';
+}
+
+// CPU bar chart
+new Chart(document.getElementById('cpuBar'), {
+  type: 'bar',
+  data: {
+    labels: ['batch-01', 'prod-api', 'dev-server', 'staging-api', 'test-server', 'monitoring', 'backup'],
+    datasets: [{
+      label: 'CPU 평균 (%)',
+      data: [2.1, 18.4, 11.2, 8.7, 1.3, 14.9, 6.2],
+      backgroundColor: (ctx) => {
+        const v = ctx.raw;
+        if (v < 5) return '#fecdd3';
+        if (v < 20) return '#fde68a';
+        return '#bbf7d0';
+      },
+      borderRadius: 5,
+    }, {
+      label: '임계값 (20%)',
+      data: Array(7).fill(20),
+      type: 'line',
+      borderColor: '#6366f1',
+      borderDash: [4, 4],
+      pointRadius: 0,
+      fill: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+      y: { ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => v + '%' }, grid: { color: '#f1f5f9' }, max: 30 }
+    }
+  }
+});
+</script>
+</body>
+</html>

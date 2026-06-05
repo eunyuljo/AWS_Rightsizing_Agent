@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Infra Chat — Design C (Terminal Dev)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg:#0c0c0e; --bg2:#141416; --bg3:#1c1c20; --bg4:#242428;
+    --border:#2a2a30; --border2:#35353d;
+    --text:#e8e8f0; --muted:#666680; --dim:#444458;
+    --green:#39d353; --red:#f85149; --yellow:#e3b341; --blue:#58a6ff; --purple:#bc8cff; --cyan:#79c0ff;
+    --orange:#ff7b72;
+  }
+  body { font-family: 'JetBrains Mono', 'SF Mono', Monaco, monospace; background:var(--bg); color:var(--text); display:flex; height:100vh; overflow:hidden; font-size:13px; }
+
+  /* Left panel */
+  .left { width:200px; background:var(--bg2); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; }
+  .left-logo { padding:14px 14px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+  .logo-bar { display:flex; gap:3px; }
+  .lb { width:10px; height:10px; border-radius:50%; }
+  .lb.r { background:#ff5f57; } .lb.y { background:#febc2e; } .lb.g { background:#28c840; }
+  .logo-text { font-size:11px; font-weight:700; color:var(--text); letter-spacing:.05em; }
+
+  .tree-section { padding:12px 0 2px; }
+  .tree-label { font-size:9px; font-weight:700; color:var(--dim); letter-spacing:.1em; text-transform:uppercase; padding:0 12px 6px; }
+  .tree-item { display:flex; align-items:center; gap:6px; padding:5px 12px; color:var(--muted); cursor:pointer; transition:all .1s; font-size:12px; }
+  .tree-item:hover { color:var(--text); background:var(--bg3); }
+  .tree-item.active { color:var(--green); }
+  .tree-item .ti { width:14px; text-align:center; font-size:11px; }
+  .tree-badge { margin-left:auto; font-size:9px; color:var(--red); border:1px solid var(--red); padding:0 4px; border-radius:2px; }
+
+  .left-bottom { margin-top:auto; padding:10px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--dim); }
+  .status-line { display:flex; align-items:center; gap:6px; }
+  .status-dot { width:6px; height:6px; border-radius:50%; background:var(--green); }
+
+  /* Right - main */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Tab bar - terminal style */
+  .tabbar { background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:stretch; height:36px; }
+  .ttab { display:flex; align-items:center; gap:7px; padding:0 16px; font-size:11px; color:var(--muted); cursor:pointer; border-right:1px solid var(--border); transition:all .1s; }
+  .ttab:hover { background:var(--bg3); color:var(--text); }
+  .ttab.active { background:var(--bg); color:var(--text); border-bottom:1px solid var(--bg); margin-bottom:-1px; }
+  .ttab .icon { font-size:10px; }
+  .tabbar-right { margin-left:auto; display:flex; align-items:center; padding:0 12px; gap:8px; }
+  .tbr-btn { font-size:10px; padding:3px 8px; background:var(--bg3); border:1px solid var(--border2); color:var(--muted); border-radius:3px; cursor:pointer; }
+  .tbr-btn.accent { border-color:var(--green); color:var(--green); }
+
+  /* Chat split layout */
+  .chat-layout { flex:1; display:flex; overflow:hidden; }
+  .chat-pane { flex:1; display:flex; flex-direction:column; overflow:hidden; border-right:1px solid var(--border); }
+  .side-pane { width:340px; background:var(--bg2); display:flex; flex-direction:column; overflow:hidden; flex-shrink:0; }
+  .side-pane-head { padding:10px 14px; border-bottom:1px solid var(--border); font-size:10px; font-weight:700; color:var(--dim); letter-spacing:.1em; text-transform:uppercase; display:flex; justify-content:space-between; }
+
+  /* Messages */
+  .msgs { flex:1; overflow-y:auto; padding:20px 0; }
+  .msgs::-webkit-scrollbar { width:3px; }
+  .msgs::-webkit-scrollbar-thumb { background:var(--border2); }
+
+  .msg { max-width:100%; margin-bottom:20px; padding:0 20px; }
+  .msg.user { }
+  .user-line { display:flex; align-items:flex-start; gap:10px; flex-direction:row-reverse; }
+  .user-prompt { background:var(--bg3); border:1px solid var(--border2); border-radius:4px; padding:8px 14px; font-size:12px; color:var(--cyan); max-width:400px; }
+  .user-prompt::before { content:'> '; color:var(--green); }
+
+  .a-line { display:flex; align-items:flex-start; gap:10px; }
+  .a-icon { color:var(--orange); font-size:14px; flex-shrink:0; margin-top:1px; }
+  .a-content { flex:1; }
+  .a-meta { font-size:10px; color:var(--dim); margin-bottom:8px; }
+
+  /* Code block */
+  .code-block { background:var(--bg); border:1px solid var(--border2); border-radius:4px; margin:8px 0; overflow:hidden; }
+  .cb-head { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; background:var(--bg3); border-bottom:1px solid var(--border); }
+  .cb-lang { font-size:10px; color:var(--green); font-weight:700; letter-spacing:.05em; }
+  .cb-btns { display:flex; gap:6px; }
+  .cb-btn { font-size:10px; color:var(--muted); cursor:pointer; padding:1px 6px; border:1px solid var(--border); border-radius:2px; }
+  .cb-btn:hover { color:var(--text); border-color:var(--border2); }
+  .cb-body { padding:12px 14px; line-height:1.7; overflow-x:auto; font-size:12px; }
+  .kw { color:var(--purple); } .fn { color:var(--cyan); } .str { color:var(--yellow); } .cm { color:var(--dim); }
+
+  /* Result table */
+  .result-block { background:var(--bg); border:1px solid var(--border2); border-radius:4px; margin:8px 0; overflow:hidden; }
+  .rb-head { display:flex; align-items:center; justify-content:space-between; padding:7px 12px; background:var(--bg3); border-bottom:1px solid var(--border); }
+  .rb-title { font-size:11px; color:var(--text); font-weight:700; }
+  .rb-sub { font-size:10px; color:var(--dim); }
+  .rb-btns { display:flex; gap:6px; }
+  .rb-btn { font-size:10px; color:var(--muted); border:1px solid var(--border); padding:2px 8px; border-radius:2px; cursor:pointer; }
+  .rb-btn.g { border-color:var(--green); color:var(--green); }
+  .rb-body { padding:8px 0; }
+  table.tt { width:100%; border-collapse:collapse; font-size:11px; }
+  table.tt th { padding:6px 12px; text-align:left; color:var(--dim); border-bottom:1px solid var(--border); font-weight:600; letter-spacing:.04em; }
+  table.tt td { padding:6px 12px; border-bottom:1px solid var(--bg3); color:var(--text); }
+  table.tt tr:last-child td { border-bottom:none; }
+  table.tt tr:hover td { background:var(--bg3); }
+  .tag { font-size:10px; padding:1px 6px; border-radius:2px; font-weight:600; }
+  .tag.r { background:#3d1a1a; color:var(--red); border:1px solid #5a2020; }
+  .tag.y { background:#2d2510; color:var(--yellow); border:1px solid #4a3a18; }
+  .tag.g { background:#0d2b16; color:var(--green); border:1px solid #1a4526; }
+
+  /* Alert box */
+  .alert-box { border-left:3px solid var(--yellow); background:#1c180a; padding:10px 14px; margin:8px 0; font-size:12px; border-radius:0 4px 4px 0; }
+  .alert-box.red { border-color:var(--red); background:#1c0a0a; }
+  .alert-box .alert-title { color:var(--yellow); font-weight:700; margin-bottom:6px; }
+  .alert-box.red .alert-title { color:var(--red); }
+  .alert-box ul { padding-left:14px; color:#b0a060; }
+  .alert-box.red ul { color:#b06060; }
+  .alert-box li { margin-bottom:3px; line-height:1.5; }
+
+  /* Chart inline */
+  .chart-block { background:var(--bg); border:1px solid var(--border2); border-radius:4px; padding:12px; margin:8px 0; }
+  .chart-block-head { font-size:10px; color:var(--dim); margin-bottom:10px; display:flex; justify-content:space-between; }
+
+  /* Input */
+  .input-zone { padding:12px 20px 14px; background:var(--bg2); border-top:1px solid var(--border); }
+  .prompt-line { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--border2); border-radius:4px; padding:8px 12px; transition:border-color .15s; }
+  .prompt-line:focus-within { border-color:var(--green); }
+  .prompt-sign { color:var(--green); font-weight:700; font-size:14px; flex-shrink:0; }
+  .prompt-input { flex:1; background:none; border:none; outline:none; color:var(--text); font-family:inherit; font-size:13px; }
+  .prompt-input::placeholder { color:var(--dim); }
+  .prompt-send { background:var(--bg3); border:1px solid var(--border2); color:var(--muted); padding:4px 10px; border-radius:3px; cursor:pointer; font-size:12px; font-family:inherit; }
+  .prompt-send:hover { border-color:var(--green); color:var(--green); }
+  .quick-cmds { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+  .qcmd { font-size:10px; color:var(--dim); border:1px solid var(--border); padding:3px 8px; border-radius:2px; cursor:pointer; }
+  .qcmd:hover { color:var(--text); border-color:var(--border2); }
+
+  /* Side pane content */
+  .side-chart-wrap { padding:12px; flex:1; overflow:hidden; }
+  .side-section { padding:10px 14px; border-bottom:1px solid var(--border); }
+  .ss-title { font-size:10px; color:var(--dim); font-weight:700; letter-spacing:.06em; margin-bottom:8px; }
+  .ss-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:11px; color:var(--muted); border-bottom:1px solid var(--bg3); }
+  .ss-row:last-child { border-bottom:none; }
+  .ss-val { color:var(--text); font-weight:600; }
+  .ss-val.red { color:var(--red); }
+  .ss-val.green { color:var(--green); }
+  .ss-val.yellow { color:var(--yellow); }
+
+  /* Dashboard view */
+  .dash-view { flex:1; overflow-y:auto; padding:20px; display:none; background:var(--bg); }
+  .dash-view::-webkit-scrollbar { width:3px; }
+  .dash-view::-webkit-scrollbar-thumb { background:var(--border2); }
+  .dash-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .dash-title-text { font-size:14px; font-weight:700; color:var(--text); }
+  .dash-ctrl { display:flex; gap:8px; }
+  .dctl-btn { font-size:10px; padding:4px 10px; background:var(--bg3); border:1px solid var(--border2); color:var(--muted); border-radius:3px; cursor:pointer; }
+  .dctl-btn.g { border-color:var(--green); color:var(--green); }
+
+  .kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+  .kpi { background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:14px; }
+  .kpi-l { font-size:9px; font-weight:700; color:var(--dim); letter-spacing:.1em; text-transform:uppercase; margin-bottom:8px; }
+  .kpi-v { font-size:22px; font-weight:700; color:var(--text); }
+  .kpi-c { font-size:10px; margin-top:4px; }
+  .kpi-c.r { color:var(--red); } .kpi-c.g { color:var(--green); } .kpi-c.m { color:var(--dim); }
+
+  .dash-grid2 { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-bottom:10px; }
+  .dash-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .dcard { background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:14px; }
+  .dcard-t { font-size:9px; font-weight:700; color:var(--dim); letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px; }
+</style>
+</head>
+<body>
+
+<!-- Left tree -->
+<div class="left">
+  <div class="left-logo">
+    <div class="logo-bar"><div class="lb r"></div><div class="lb y"></div><div class="lb g"></div></div>
+    <span class="logo-text">infrachat</span>
+  </div>
+
+  <div class="tree-section">
+    <div class="tree-label">Sessions</div>
+    <div class="tree-item active"><span class="ti">▶</span> ec2-cost-analysis</div>
+    <div class="tree-item"><span class="ti">○</span> security-audit</div>
+    <div class="tree-item"><span class="ti">○</span> vpc-topology</div>
+    <div class="tree-item"><span class="ti">○</span> rds-performance</div>
+  </div>
+
+  <div class="tree-section">
+    <div class="tree-label">Dashboards</div>
+    <div class="tree-item" onclick="go('dash')"><span class="ti">▦</span> cost-overview</div>
+    <div class="tree-item" onclick="go('dash')"><span class="ti">▦</span> security <span class="tree-badge">3</span></div>
+    <div class="tree-item" onclick="go('dash')"><span class="ti">▦</span> performance</div>
+  </div>
+
+  <div class="tree-section">
+    <div class="tree-label">Config</div>
+    <div class="tree-item"><span class="ti">⚙</span> aws-accounts</div>
+    <div class="tree-item"><span class="ti">⚙</span> settings</div>
+  </div>
+
+  <div class="left-bottom">
+    <div class="status-line"><div class="status-dot"></div> ap-northeast-2 · connected</div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="tabbar">
+    <div class="ttab active" id="t-chat" onclick="go('chat')"><span class="icon">⬥</span> chat</div>
+    <div class="ttab" id="t-dash" onclick="go('dash')"><span class="icon">⬥</span> dashboard</div>
+    <div class="tabbar-right">
+      <span class="tbr-btn">region: ap-northeast-2</span>
+      <span class="tbr-btn">30d</span>
+      <span class="tbr-btn accent">+ save view</span>
+    </div>
+  </div>
+
+  <!-- Chat Layout -->
+  <div class="chat-layout" id="v-chat">
+    <!-- Chat pane -->
+    <div class="chat-pane">
+      <div class="msgs" id="msgs">
+
+        <!-- user 1 -->
+        <div class="msg user">
+          <div class="user-line">
+            <div class="user-prompt">퍼블릭 서브넷에 있으면서 0.0.0.0/0 허용된 EC2 찾아줘</div>
+          </div>
+        </div>
+
+        <!-- assistant 1 -->
+        <div class="msg">
+          <div class="a-line">
+            <div class="a-icon">λ</div>
+            <div class="a-content">
+              <div class="a-meta">infrachat · 14:32:01 · steampipe</div>
+
+              <div class="code-block">
+                <div class="cb-head">
+                  <span class="cb-lang">SQL</span>
+                  <div class="cb-btns">
+                    <span class="cb-btn">copy</span>
+                    <span class="cb-btn">run</span>
+                  </div>
+                </div>
+                <div class="cb-body">
+<span class="kw">SELECT</span> i.instance_id,
+       i.tags->><span class="str">'Name'</span>       <span class="kw">AS</span> name,
+       i.instance_type,
+       i.public_ip_address,
+       sg.group_name
+<span class="kw">FROM</span>   aws_ec2_instance       i
+<span class="kw">JOIN</span>   aws_vpc_security_group  sg  <span class="kw">ON</span> sg.group_id <span class="fn">= ANY</span>(i.security_group_ids)
+<span class="kw">JOIN</span>   aws_vpc_subnet          sub <span class="kw">ON</span> sub.subnet_id = i.subnet_id
+<span class="kw">WHERE</span>  sub.map_public_ip_on_launch = <span class="str">true</span>
+  <span class="kw">AND</span>  sg.ingress_cidr_blocks <span class="fn">@></span> <span class="str">'["0.0.0.0/0"]'</span>
+  <span class="kw">AND</span>  i.instance_state = <span class="str">'running'</span>;</div>
+              </div>
+
+              <div class="result-block">
+                <div class="rb-head">
+                  <div><div class="rb-title">→ 4 rows returned</div><div class="rb-sub">0.34s · ap-northeast-2</div></div>
+                  <div class="rb-btns">
+                    <span class="rb-btn g">pin to dashboard</span>
+                    <span class="rb-btn">export</span>
+                  </div>
+                </div>
+                <div class="rb-body">
+                  <table class="tt">
+                    <thead><tr><th>instance_id</th><th>name</th><th>type</th><th>public_ip</th><th>sg</th><th>risk</th></tr></thead>
+                    <tbody>
+                      <tr><td style="color:var(--cyan)">i-0a3f2b91</td><td>prod-web-01</td><td>t3.medium</td><td>52.78.12.34</td><td>sg-web-public</td><td><span class="tag r">HIGH</span></td></tr>
+                      <tr><td style="color:var(--cyan)">i-0b4c3d82</td><td>prod-web-02</td><td>t3.medium</td><td>52.78.56.78</td><td>sg-web-public</td><td><span class="tag r">HIGH</span></td></tr>
+                      <tr><td style="color:var(--cyan)">i-0c5d4e93</td><td>dev-bastion</td><td>t3.small</td><td>13.125.88.91</td><td>sg-bastion</td><td><span class="tag y">MED</span></td></tr>
+                      <tr><td style="color:var(--cyan)">i-0d6e5f04</td><td>test-server</td><td>t2.micro</td><td>3.36.144.22</td><td>sg-open-all</td><td><span class="tag r">HIGH</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="alert-box red">
+                <div class="alert-title">! SECURITY ALERT</div>
+                <ul>
+                  <li>test-server / sg-open-all: all ports exposed to 0.0.0.0/0 — immediate action required</li>
+                  <li>prod-web-01/02: port 22 open to internet — move behind ALB</li>
+                  <li>dev-bastion: restrict source IP to office CIDR</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- user 2 -->
+        <div class="msg user">
+          <div class="user-line">
+            <div class="user-prompt">prod-api-server CPU 30일 추이</div>
+          </div>
+        </div>
+
+        <!-- assistant 2 -->
+        <div class="msg">
+          <div class="a-line">
+            <div class="a-icon">λ</div>
+            <div class="a-content">
+              <div class="a-meta">infrachat · 14:33:12 · cloudwatch</div>
+              <div class="chart-block">
+                <div class="chart-block-head">
+                  <span>CPUUtilization · i-0a3f2b91 · 1h avg · 30d</span>
+                  <span style="color:var(--green); cursor:pointer">pin ↗</span>
+                </div>
+                <div style="height:180px"><canvas id="cpuChart"></canvas></div>
+              </div>
+              <div class="alert-box">
+                <div class="alert-title">~ RIGHTSIZING ANALYSIS</div>
+                <ul>
+                  <li>avg: 18.4% / max: 41.2% / p99: 38.1%</li>
+                  <li>current: m5.2xlarge ($277/mo) → recommended: m5.xlarge ($138/mo)</li>
+                  <li>estimated savings: $139/mo (50%) — sufficient headroom at max load</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- user 3 -->
+        <div class="msg user">
+          <div class="user-line">
+            <div class="user-prompt">인스턴스별 월 비용 차트</div>
+          </div>
+        </div>
+
+        <!-- assistant 3 -->
+        <div class="msg">
+          <div class="a-line">
+            <div class="a-icon">λ</div>
+            <div class="a-content">
+              <div class="a-meta">infrachat · 14:33:58 · ec2_pricing.json</div>
+              <div class="chart-block">
+                <div class="chart-block-head">
+                  <span>monthly cost estimate · on-demand · ap-northeast-2 · 720h</span>
+                  <span style="color:var(--green); cursor:pointer">pin ↗</span>
+                </div>
+                <div style="height:180px"><canvas id="costChart"></canvas></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Input -->
+      <div class="input-zone">
+        <div class="quick-cmds">
+          <span class="qcmd">\tags-missing</span>
+          <span class="qcmd">\eip-unused</span>
+          <span class="qcmd">\s3-public</span>
+          <span class="qcmd">\rds-connections</span>
+          <span class="qcmd">\vpc-peers</span>
+        </div>
+        <div class="prompt-line">
+          <span class="prompt-sign">›</span>
+          <input type="text" class="prompt-input" placeholder="query aws infrastructure...">
+          <button class="prompt-send">run</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side pane -->
+    <div class="side-pane">
+      <div class="side-pane-head">
+        <span>Summary</span>
+        <span style="color:var(--dim)">auto</span>
+      </div>
+
+      <div class="side-section">
+        <div class="ss-title">Account Overview</div>
+        <div class="ss-row"><span>Running EC2</span><span class="ss-val">24</span></div>
+        <div class="ss-row"><span>Running RDS</span><span class="ss-val">6</span></div>
+        <div class="ss-row"><span>Month-to-date</span><span class="ss-val">$4,182</span></div>
+        <div class="ss-row"><span>vs last month</span><span class="ss-val red">+12.3%</span></div>
+        <div class="ss-row"><span>Savings potential</span><span class="ss-val green">$861</span></div>
+      </div>
+
+      <div class="side-section">
+        <div class="ss-title">Security Issues</div>
+        <div class="ss-row"><span>0.0.0.0/0 exposed</span><span class="ss-val red">4</span></div>
+        <div class="ss-row"><span>No MFA (root)</span><span class="ss-val red">1</span></div>
+        <div class="ss-row"><span>Unencrypted EBS</span><span class="ss-val yellow">3</span></div>
+        <div class="ss-row"><span>Public S3</span><span class="ss-val yellow">2</span></div>
+      </div>
+
+      <div class="side-section">
+        <div class="ss-title">Rightsizing Queue</div>
+        <div class="ss-row"><span>prod-api-server</span><span class="ss-val yellow">↓ m5.xl</span></div>
+        <div class="ss-row"><span>dev-server</span><span class="ss-val yellow">↓ t3.md</span></div>
+        <div class="ss-row"><span>batch-01</span><span class="ss-val red">terminate?</span></div>
+        <div class="ss-row"><span>test-rds</span><span class="ss-val yellow">↓ r5.lg</span></div>
+      </div>
+
+      <div style="padding:12px 14px;flex:1;overflow:hidden;">
+        <div class="ss-title">Cost by Service (30d)</div>
+        <div style="height:160px;margin-top:8px"><canvas id="sidePie"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dash-view" id="v-dash">
+    <div class="dash-top">
+      <span class="dash-title-text">// cost-overview dashboard</span>
+      <div class="dash-ctrl">
+        <span class="dctl-btn">30d ▾</span>
+        <span class="dctl-btn">region ▾</span>
+        <span class="dctl-btn g">+ widget</span>
+      </div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-l">Total Cost MTD</div><div class="kpi-v">$4,182</div><div class="kpi-c r">▲ 12.3% vs last month</div></div>
+      <div class="kpi"><div class="kpi-l">Running EC2</div><div class="kpi-v">24</div><div class="kpi-c m">8 regions</div></div>
+      <div class="kpi"><div class="kpi-l">Savings Potential</div><div class="kpi-v" style="color:var(--green)">$861</div><div class="kpi-c g">▼ 20.6% reducible</div></div>
+      <div class="kpi"><div class="kpi-l">Security Issues</div><div class="kpi-v" style="color:var(--red)">3</div><div class="kpi-c r">immediate action</div></div>
+    </div>
+
+    <div class="dash-grid2">
+      <div class="dcard">
+        <div class="dcard-t">Daily Cost Trend</div>
+        <div style="height:190px"><canvas id="dLine"></canvas></div>
+      </div>
+      <div class="dcard">
+        <div class="dcard-t">Cost by Service</div>
+        <div style="height:190px"><canvas id="dPie"></canvas></div>
+      </div>
+    </div>
+
+    <div class="dash-grid3">
+      <div class="dcard">
+        <div class="dcard-t">Cost by Region</div>
+        <div style="height:150px"><canvas id="dRegion"></canvas></div>
+      </div>
+      <div class="dcard">
+        <div class="dcard-t">Rightsizing Queue</div>
+        <table class="tt" style="margin:0">
+          <thead><tr><th>instance</th><th>action</th><th>saving</th></tr></thead>
+          <tbody>
+            <tr><td>prod-api</td><td style="color:var(--yellow)">m5.2xl→xl</td><td><span class="tag g">-$139</span></td></tr>
+            <tr><td>dev-svr</td><td style="color:var(--yellow)">t3.lg→md</td><td><span class="tag g">-$33</span></td></tr>
+            <tr><td>batch-01</td><td style="color:var(--red)">terminate</td><td><span class="tag r">-$561</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dcard">
+        <div class="dcard-t">Untagged Resources</div>
+        <div style="padding-top:4px">
+          <div class="ss-row"><span>EC2</span><span class="ss-val red">7</span></div>
+          <div class="ss-row"><span>RDS</span><span class="ss-val yellow">2</span></div>
+          <div class="ss-row"><span>S3</span><span class="ss-val yellow">5</span></div>
+          <div class="ss-row"><span>EIP</span><span class="ss-val green">0</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function go(v) {
+  document.getElementById('v-chat').style.display = 'none';
+  document.getElementById('v-dash').style.display = 'none';
+  ['chat','dash'].forEach(x => { const t = document.getElementById('t-'+x); if(t) t.classList.remove('active'); });
+  if (v==='chat') { document.getElementById('v-chat').style.display='flex'; document.getElementById('t-chat').classList.add('active'); }
+  else { document.getElementById('v-dash').style.display='block'; document.getElementById('t-dash').classList.add('active'); renderDash(); }
+}
+
+const cOpts = (extra={}) => ({
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{ labels:{ color:'#666680', font:{size:10} } } },
+  scales:{ x:{ ticks:{color:'#444458',font:{size:9}}, grid:{color:'#1c1c20'} }, y:{ ticks:{color:'#444458',font:{size:9}}, grid:{color:'#1c1c20'} } },
+  ...extra
+});
+
+// CPU chart
+const l30=Array.from({length:30},(_,i)=>{const d=new Date('2026-05-06');d.setDate(d.getDate()+i);return `${d.getMonth()+1}/${d.getDate()}`;});
+const cpu=l30.map((_,i)=>+(12+Math.sin(i*.4)*8+Math.random()*5).toFixed(1));
+cpu[8]=38; cpu[9]=41.2; cpu[22]=35;
+new Chart(document.getElementById('cpuChart'),{type:'line',data:{labels:l30,datasets:[
+  {label:'CPU avg%',data:cpu,borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,.06)',tension:.4,pointRadius:0,fill:true},
+  {label:'threshold 70%',data:Array(30).fill(70),borderColor:'#f85149',borderDash:[4,4],pointRadius:0,fill:false}
+]},options:cOpts()});
+
+// Cost bar
+new Chart(document.getElementById('costChart'),{type:'bar',data:{
+  labels:['prod-api','prod-web-01','prod-rds','batch-01','dev-svr','staging','test'],
+  datasets:[{label:'USD/mo',data:[277,138,198,210,66,44,18],backgroundColor:['#f85149','#ff7b72','#bc8cff','#ff7b72','#58a6ff','#58a6ff','#444458'],borderRadius:3}]
+},options:cOpts({plugins:{legend:{display:false}}})});
+
+// Side pie
+new Chart(document.getElementById('sidePie'),{type:'doughnut',data:{
+  labels:['EC2','RDS','S3','Transfer','Other'],
+  datasets:[{data:[2847,892,234,156,53],backgroundColor:['#58a6ff','#bc8cff','#ff7b72','#39d353','#444458'],borderWidth:0}]
+},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#666680',font:{size:9},boxWidth:8}}}}});
+
+let dashDone=false;
+function renderDash(){
+  if(dashDone)return; dashDone=true;
+  const sc={x:{ticks:{color:'#444458',font:{size:9}},grid:{color:'#1c1c20'}},y:{ticks:{color:'#444458',font:{size:9}},grid:{color:'#1c1c20'}}};
+  new Chart(document.getElementById('dLine'),{type:'line',data:{labels:l30,datasets:[{label:'daily cost',data:l30.map(()=>+(100+Math.random()*60).toFixed(0)),borderColor:'#58a6ff',tension:.4,pointRadius:0,fill:true,backgroundColor:'rgba(88,166,255,.06)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:sc}});
+  new Chart(document.getElementById('dPie'),{type:'doughnut',data:{labels:['EC2','RDS','S3','Transfer','Other'],datasets:[{data:[2847,892,234,156,53],backgroundColor:['#58a6ff','#bc8cff','#ff7b72','#39d353','#444458'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#666680',font:{size:10},boxWidth:10}}}}});
+  new Chart(document.getElementById('dRegion'),{type:'bar',data:{labels:['ap-ne-2','us-east-1','eu-west-1','ap-se-1'],datasets:[{label:'cost',data:[2841,892,321,128],backgroundColor:'#bc8cff',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:sc}});
+}
+</script>
+</body>
+</html>
