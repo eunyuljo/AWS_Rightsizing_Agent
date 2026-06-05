@@ -5,8 +5,16 @@ from config import config
 
 SEVERITY_EMOJI = {
     "critical": "🔴",
-    "warning": "🟡",
-    "info": "🔵",
+    "high":     "🟠",
+    "medium":   "🟡",
+    "low":      "🔵",
+}
+
+SEVERITY_LABEL = {
+    "critical": "심각",
+    "high":     "높음",
+    "medium":   "보통",
+    "low":      "낮음",
 }
 
 
@@ -29,18 +37,24 @@ def send(text: str, blocks: list = None):
         return resp.read()
 
 
-def send_alert(alert: dict, explanation: str):
-    emoji = SEVERITY_EMOJI.get(alert.get("severity", "info"), "⚪")
-    severity_label = {"critical": "긴급", "warning": "주의", "info": "참고"}.get(
-        alert.get("severity", "info"), ""
-    )
+def send_violation(violation: dict, explanation: str):
+    """
+    규정 위반 항목 하나를 Slack으로 전송.
+    violation 은 Violation.to_dict() 형태.
+    """
+    sev = violation.get("severity", "low")
+    emoji = SEVERITY_EMOJI.get(sev, "⚪")
+    label = SEVERITY_LABEL.get(sev, "")
+    framework = violation.get("framework", "")
+    rule_id = violation.get("rule_id", "")
+    resource = violation.get("resource_id", "")
 
     blocks = [
         {
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"{emoji} [{severity_label}] {alert.get('title', '알림')}",
+                "text": f"{emoji} [{label}] {violation.get('title', '위반 감지')}",
             },
         },
         {
@@ -48,35 +62,62 @@ def send_alert(alert: dict, explanation: str):
             "text": {"type": "mrkdwn", "text": explanation},
         },
         {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*프레임워크:* {framework}"},
+                {"type": "mrkdwn", "text": f"*룰 ID:* `{rule_id}`"},
+                {"type": "mrkdwn", "text": f"*리소스:* `{resource}`"},
+                {"type": "mrkdwn", "text": f"*카테고리:* {violation.get('category', '')}"},
+            ],
+        },
+        {
             "type": "context",
             "elements": [
-                {"type": "mrkdwn", "text": f"*유형:* `{alert.get('alert_type', '')}` | *시각:* {alert.get('ts', '')}"},
+                {
+                    "type": "mrkdwn",
+                    "text": f"*조치:* {violation.get('remediation', '')}",
+                }
             ],
         },
         {"type": "divider"},
     ]
-    send(f"{emoji} {alert.get('title', '알림')}", blocks=blocks)
+    send(f"{emoji} {violation.get('title', '위반 감지')}", blocks=blocks)
 
 
-def send_daily_summary(alerts: list[dict], summary_text: str):
-    critical = sum(1 for a in alerts if a.get("severity") == "critical")
-    warning = sum(1 for a in alerts if a.get("severity") == "warning")
+def send_daily_summary(violations: list[dict], summary_text: str):
+    critical = sum(1 for v in violations if v.get("severity") == "critical")
+    high = sum(1 for v in violations if v.get("severity") == "high")
+    medium = sum(1 for v in violations if v.get("severity") == "medium")
+    low = sum(1 for v in violations if v.get("severity") == "low")
+
+    by_cat: dict[str, int] = {}
+    for v in violations:
+        cat = v.get("category", "기타")
+        by_cat[cat] = by_cat.get(cat, 0) + 1
+
+    cat_text = " | ".join(f"{k}: {n}건" for k, n in by_cat.items())
 
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": "☁️ AWS 인프라 일일 리포트"},
+            "text": {"type": "plain_text", "text": "☁️ AWS 인프라 일일 컴플라이언스 리포트"},
         },
         {
             "type": "section",
             "fields": [
-                {"type": "mrkdwn", "text": f"*🔴 긴급:* {critical}건"},
-                {"type": "mrkdwn", "text": f"*🟡 주의:* {warning}건"},
+                {"type": "mrkdwn", "text": f"*🔴 심각:* {critical}건"},
+                {"type": "mrkdwn", "text": f"*🟠 높음:* {high}건"},
+                {"type": "mrkdwn", "text": f"*🟡 보통:* {medium}건"},
+                {"type": "mrkdwn", "text": f"*🔵 낮음:* {low}건"},
             ],
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*카테고리별:* {cat_text}"},
         },
         {
             "type": "section",
             "text": {"type": "mrkdwn", "text": summary_text},
         },
     ]
-    send("AWS 인프라 일일 리포트", blocks=blocks)
+    send(f"AWS 일일 리포트 — 총 {len(violations)}건", blocks=blocks)

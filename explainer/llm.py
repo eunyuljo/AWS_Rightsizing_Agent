@@ -13,20 +13,26 @@ def _get_client():
     return _client
 
 
-def explain_alert(alert: dict) -> str:
-    """알림 하나를 비즈니스 언어로 설명"""
-    prompt = f"""
-당신은 AWS 인프라 전문가입니다.
-아래 이상 감지 결과를 비기술직 담당자도 이해할 수 있는 언어로 2~4문장으로 설명하세요.
-- 무슨 일이 생겼는지
-- 왜 중요한지 (비용/보안/가용성 관점)
-- 다음에 무엇을 확인해야 하는지
+def explain_violation(violation: dict) -> str:
+    """
+    규칙 위반 한 건을 비즈니스 언어로 설명.
+    violation 은 Violation.to_dict() 형태의 dict.
+    """
+    severity_kr = {
+        "critical": "심각", "high": "높음", "medium": "보통", "low": "낮음",
+    }.get(violation.get("severity", ""), "")
 
-알림 데이터:
-{json.dumps(alert, ensure_ascii=False, indent=2)}
+    prompt = f"""당신은 AWS 인프라 전문가입니다.
+아래 규정 위반 감지 결과를 비기술직 담당자도 이해할 수 있는 한국어로 2~4문장으로 설명하세요.
+- 무슨 문제가 발견됐는지
+- 왜 위험한지 (보안/비용/가용성 관점)
+- 즉시 취해야 할 조치
 
-설명 (한국어):
-"""
+위반 데이터:
+{json.dumps(violation, ensure_ascii=False, indent=2)}
+
+설명 (한국어, {severity_kr} 심각도):"""
+
     resp = _get_client().messages.create(
         model=config.claude_model,
         max_tokens=300,
@@ -35,28 +41,27 @@ def explain_alert(alert: dict) -> str:
     return resp.content[0].text.strip()
 
 
-def explain_alerts_summary(alerts: list[dict]) -> str:
-    """여러 알림을 하나의 요약으로"""
-    if not alerts:
-        return "현재 감지된 이상 없음."
+def explain_violations_summary(violations: list[dict]) -> str:
+    """여러 위반 항목을 Slack용 요약 메시지로"""
+    if not violations:
+        return "현재 감지된 위반 없음."
 
-    prompt = f"""
-당신은 AWS MSP 엔지니어입니다.
-아래 {len(alerts)}개의 이상 감지 결과를 운영팀에 전달할 슬랙 메시지로 작성하세요.
+    prompt = f"""당신은 AWS MSP 엔지니어입니다.
+아래 {len(violations)}개의 규정 위반 결과를 운영팀에 전달할 슬랙 메시지로 작성하세요.
 
 형식:
 - 첫 줄: 전체 상황 한 줄 요약
-- 이슈별 한 줄씩 (심각도 이모지 포함)
+- 심각도별 이슈 한 줄씩 (이모지 포함)
 - 마지막 줄: 권고 액션
 
-이상 목록:
-{json.dumps(alerts, ensure_ascii=False, indent=2)}
+위반 목록:
+{json.dumps(violations, ensure_ascii=False, indent=2)}
 
-슬랙 메시지 (한국어, 마크다운 사용):
-"""
+슬랙 메시지 (한국어, 마크다운):"""
+
     resp = _get_client().messages.create(
         model=config.claude_model,
-        max_tokens=500,
+        max_tokens=600,
         messages=[{"role": "user", "content": prompt}],
     )
     return resp.content[0].text.strip()
@@ -81,12 +86,11 @@ def answer_question(question: str, context_data: dict) -> dict:
   "needs_more_data": false
 }"""
 
-    user_msg = f"""
-질문: {question}
+    user_msg = f"""질문: {question}
 
 현재 인프라 데이터:
-{json.dumps(context_data, ensure_ascii=False, indent=2, default=str)}
-"""
+{json.dumps(context_data, ensure_ascii=False, indent=2, default=str)}"""
+
     resp = _get_client().messages.create(
         model=config.claude_model,
         max_tokens=800,
@@ -95,7 +99,6 @@ def answer_question(question: str, context_data: dict) -> dict:
     )
 
     text = resp.content[0].text.strip()
-    # JSON 파싱 시도, 실패 시 fallback
     try:
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()

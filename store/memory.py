@@ -44,9 +44,10 @@ def init_db():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             ts          TEXT NOT NULL,
             alert_type  TEXT NOT NULL,
-            severity    TEXT NOT NULL,  -- critical / warning / info
+            severity    TEXT NOT NULL,
             title       TEXT NOT NULL,
             detail      TEXT NOT NULL,
+            resource_id TEXT,
             raw_data    TEXT,           -- JSON
             notified    INTEGER DEFAULT 0
         );
@@ -120,11 +121,18 @@ def get_previous_resource_ids(resource_type: str, hours: int = 25) -> set[str]:
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
-def save_alert(alert_type: str, severity: str, title: str, detail: str, raw_data: dict = None) -> int:
+def save_alert(
+    alert_type: str,
+    severity: str,
+    title: str,
+    detail: str,
+    resource_id: str = "",
+    raw_data: dict = None,
+) -> int:
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO alerts (ts, alert_type, severity, title, detail, raw_data) VALUES (?,?,?,?,?,?)",
-            (now_iso(), alert_type, severity, title, detail, json.dumps(raw_data) if raw_data else None)
+            "INSERT INTO alerts (ts, alert_type, severity, title, detail, resource_id, raw_data) VALUES (?,?,?,?,?,?,?)",
+            (now_iso(), alert_type, severity, title, detail, resource_id, json.dumps(raw_data) if raw_data else None)
         )
         return cur.lastrowid
 
