@@ -67,14 +67,16 @@ def explain_violations_summary(violations: list[dict]) -> str:
     return resp.content[0].text.strip()
 
 
-def answer_question(question: str, context_data: dict) -> dict:
+def answer_question(question: str, context_data: dict, history: list[dict] = None) -> dict:
     """
-    채팅 질문에 답변 — 응답 스타일(biz/tech)을 LLM이 자동 판단
+    채팅 질문에 답변 — 응답 스타일(biz/tech)을 LLM이 자동 판단.
+    history: [{"role": "user"|"assistant", "content": "..."}, ...]
     """
     system = """당신은 AWS 인프라 어시스턴트입니다.
 질문의 성격을 판단해서 응답 스타일을 결정하세요:
-- 비즈니스 질문 (비용, 절감, 왜, 얼마) → 비즈니스 언어, 숫자 강조, SQL 숨김
-- 기술 질문 (인스턴스 ID, SQL, 목록, 메트릭) → 기술 언어, 데이터 상세
+- 비즈니스 질문 (비용, 절감, 왜, 얼마, 요약) → 비즈니스 언어, 숫자 강조, SQL 숨김
+- 기술 질문 (인스턴스 ID, SQL, 목록, 메트릭, 위반 상세) → 기술 언어, 데이터 상세
+- 컴플라이언스 질문 (위반, ISMS, CIS, 보안이슈) → 위험도 강조, 조치 방법 포함
 
 반드시 JSON으로만 응답하세요:
 {
@@ -86,16 +88,26 @@ def answer_question(question: str, context_data: dict) -> dict:
   "needs_more_data": false
 }"""
 
+    # 대화 히스토리 + 현재 질문으로 messages 구성
+    messages: list[dict] = []
+    for h in (history or []):
+        role = h.get("role", "user")
+        content = h.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+
     user_msg = f"""질문: {question}
 
 현재 인프라 데이터:
 {json.dumps(context_data, ensure_ascii=False, indent=2, default=str)}"""
 
+    messages.append({"role": "user", "content": user_msg})
+
     resp = _get_client().messages.create(
         model=config.claude_model,
         max_tokens=800,
         system=system,
-        messages=[{"role": "user", "content": user_msg}],
+        messages=messages,
     )
 
     text = resp.content[0].text.strip()

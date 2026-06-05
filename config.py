@@ -1,6 +1,14 @@
 import os
 from dataclasses import dataclass, field
 from typing import Optional
+from pathlib import Path
+
+# .env 파일이 있으면 자동 로드 (없어도 무시)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env", override=False)
+except ImportError:
+    pass
 
 
 @dataclass
